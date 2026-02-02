@@ -528,6 +528,7 @@ TEMPLATE = """
             color: #0f172a;
             letter-spacing: 0.05em;
             text-transform: uppercase;
+            text-align: center;
         }
         .stats-main {
             flex: 1;
@@ -540,7 +541,8 @@ TEMPLATE = """
             font-size: 11px;
             font-weight: 600;
             color: #020617;
-            margin-bottom: 6px;
+            text-align: center;
+            margin-bottom: 8px;
         }
         .stats-calendar-summary {
             font-size: 10px;
@@ -801,7 +803,7 @@ TEMPLATE = """
                     Summary for {{ selected_schedule or 'All Schedules' }}
                 </div>
                 <div class="stats-note">
-                    This statistics is for the sites with schedules only.
+                    This is for the sites with schedules only.
                 </div>
                 <div class="stats-main">
                     <div class="stats-grid">
@@ -837,11 +839,11 @@ TEMPLATE = """
                     <div class="stats-charts">
                         <div class="stats-chart">
                             <div class="stats-label">Starlink Status</div>
-                            <canvas id="starChart" style="width: 100%; max-width: 180px; height: 80px;"></canvas>
+                            <canvas id="starChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
                         </div>
                         <div class="stats-chart">
                             <div class="stats-label">Approval Status</div>
-                            <canvas id="approvalChart" style="width: 100%; max-width: 180px; height: 80px;"></canvas>
+                            <canvas id="approvalChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
                         </div>
                     </div>
                 </div>
