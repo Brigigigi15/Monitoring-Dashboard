@@ -138,7 +138,14 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
-        return [], [], []
+        return [], [], [], {
+            "active": False,
+            "star_activated": 0,
+            "star_not_activated": 0,
+            "approval_accepted": 0,
+            "approval_pending": 0,
+            "approval_decline": 0,
+        }
 
     df_star = load_starlink_df()
 
@@ -235,7 +242,7 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
     # Build stats based on the filtered set (for selected schedule/region)
     if df_sorted.empty:
         stats = {
-            "active": bool(selected_schedule),
+            "active": False,
             "star_activated": 0,
             "star_not_activated": 0,
             "approval_accepted": 0,
@@ -267,7 +274,7 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
         approval_decline = decline_mask.sum()
         approval_pending = len(df_sorted) - approval_accepted - approval_decline
         stats = {
-            "active": bool(selected_schedule),
+            "active": True,  # show stats for overall or filtered
             "star_activated": int(star_activated),
             "star_not_activated": int(star_not_activated),
             "approval_accepted": int(approval_accepted),
@@ -356,9 +363,16 @@ TEMPLATE = """
             margin-bottom: 6px;
             font-size: 12px;
         }
+        .filter-bar label {
+            color: #4b5563;
+            font-weight: 500;
+        }
         .filter-bar select {
             font-size: 12px;
-            padding: 2px 4px;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            border: 1px solid #d0d7e2;
+            background-color: #ffffff;
         }
         .card {
             background: #ffffff;
@@ -395,11 +409,22 @@ TEMPLATE = """
             word-wrap: break-word;         /* break long tokens like 'Delivery/Installation' */
             word-break: break-word;
         }
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
         tbody tr:nth-child(even) td {
             background-color: #f8fafc;
         }
         tbody tr:hover td {
             background-color: #e5f0ff;
+        }
+        .row-warning td {
+            background-color: #fef9c3;
+        }
+        .row-critical td {
+            background-color: #fee2e2;
         }
         .region-cell {
             text-align: left;
@@ -505,6 +530,11 @@ TEMPLATE = """
         <div class="meta-line">
             Auto-refresh: 60s | Last update: {{ last_updated }}
         </div>
+        <div class="meta-line">
+            Showing {{ rows|length }} records
+            • Region: {{ selected_region or 'All' }}
+            • Schedule: {{ selected_schedule or 'All' }}
+        </div>
 
         <form method="get" class="filter-bar">
             <label for="region-select">Region:</label>
@@ -530,19 +560,27 @@ TEMPLATE = """
                         <tr>
                             <th>Region</th>
                             <th>Province</th>
-                            <th>BEIS School ID</th>
-                            <th>Schedule of Delivery/Installation</th>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                            <th>Installation Status</th>
-                            <th>Starlink Status</th>
-                            <th>Approval (Accepted / Decline)</th>
-                            <th>Blocker (Supplier)</th>
+                            <th>BEIS ID</th>
+                            <th title="Schedule of Delivery/Installation">Schedule</th>
+                            <th title="Start Time">Start</th>
+                            <th title="End Time">End</th>
+                            <th title="Outcome Status (to be Accomplished by Supplier)">Installation</th>
+                            <th>Starlink</th>
+                            <th title="Approval (Accepted / Decline)">Approval</th>
+                            <th title="Blocker (to be Accomplished by Supplier)">Blocker</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in rows %}
-                        <tr>
+                        {% set star = (row["Starlink Status"] or "") | lower %}
+                        {% set appr = (row["Approval"] or "") | lower %}
+                        {% set row_class = '' %}
+                        {% if 'declin' in appr %}
+                            {% set row_class = 'row-critical' %}
+                        {% elif star != 'activated' %}
+                            {% set row_class = 'row-warning' %}
+                        {% endif %}
+                        <tr class="{{ row_class }}">
                             <td class="region-cell">{{ row["Region"] }}</td>
                             <td>{{ row["Province"] }}</td>
                             <td class="school-cell">{{ row["BEIS School ID"] }}</td>
@@ -550,13 +588,11 @@ TEMPLATE = """
                             <td>{{ row["Start Time"] }}</td>
                             <td>{{ row["End Time"] }}</td>
                             <td>{{ row["Installation Status"] }}</td>
-                            {% set star = (row["Starlink Status"] or "") | lower %}
                             <td>
                                 <span class="status-pill {% if star == 'activated' %}status-ok{% else %}status-bad{% endif %}">
                                     {{ row["Starlink Status"] or 'Not Activated' }}
                                 </span>
                             </td>
-                            {% set appr = (row["Approval"] or "") | lower %}
                             <td>
                                 <span class="status-pill
                                     {% if appr == 'accepted' %}
@@ -582,27 +618,29 @@ TEMPLATE = """
             </div>
             {% if stats.active %}
             <div class="stats-card">
-                <div class="stats-title">Summary for {{ selected_schedule }}</div>
+                <div class="stats-title">
+                    Summary for {{ selected_schedule or 'All Schedules' }}
+                </div>
                 <div class="stats-main">
                     <div class="stats-grid">
                         <div class="stats-item">
-                            <div class="stats-label">Starlink Activated</div>
+                            <div class="stats-label">✔ Starlink Activated</div>
                             <div class="stats-value">{{ stats.star_activated }}</div>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">Starlink Not Activated</div>
+                            <div class="stats-label">⚠ Starlink Not Activated</div>
                             <div class="stats-value">{{ stats.star_not_activated }}</div>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">Approval Accepted</div>
+                            <div class="stats-label">✔ Approval Accepted</div>
                             <div class="stats-value">{{ stats.approval_accepted }}</div>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">Approval Pending / Blank</div>
+                            <div class="stats-label">⚠ Approval Pending / Blank</div>
                             <div class="stats-value">{{ stats.approval_pending }}</div>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">Approval Decline / Other</div>
+                            <div class="stats-label">✖ Approval Decline / Other</div>
                             <div class="stats-value">{{ stats.approval_decline }}</div>
                         </div>
                     </div>
