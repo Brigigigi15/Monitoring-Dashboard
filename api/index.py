@@ -13,7 +13,7 @@ def index(path: str):
     # Single handler for any path within this function (/, /api, /api/index, etc.)
     selected_region = request.args.get("region", "").strip() or None
     selected_schedule = request.args.get("schedule", "").strip() or None
-    rows, region_options, schedule_options = get_table_data(selected_region, selected_schedule)
+    rows, region_options, schedule_options, stats = get_table_data(selected_region, selected_schedule)
     return render_template_string(
         TEMPLATE,
         rows=rows,
@@ -21,6 +21,7 @@ def index(path: str):
         schedule_options=schedule_options,
         selected_region=selected_region or "",
         selected_schedule=selected_schedule or "",
+        stats=stats,
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 

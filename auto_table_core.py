@@ -135,7 +135,7 @@ def load_main_df() -> pd.DataFrame:
 
 
 def get_table_data(selected_region: str | None = None, selected_schedule: str | None = None):
-    """Return rows and filter options for the dashboard."""
+    """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
         return [], [], []
@@ -232,6 +232,41 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
     if selected_schedule:
         df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
 
+    # Build stats based on the filtered set (for selected schedule/region)
+    if df_sorted.empty:
+        stats = {
+            "active": bool(selected_schedule),
+            "star_activated": 0,
+            "star_not_activated": 0,
+            "approval_accepted": 0,
+            "approval_pending": 0,
+            "approval_decline": 0,
+        }
+    else:
+        star_series = (
+            df_sorted["Starlink Status"].fillna("").astype(str).str.strip().str.lower()
+        )
+        appr_series = (
+            df_sorted["Approval (Accepted / Decline) "]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        star_activated = (star_series == "activated").sum()
+        star_not_activated = len(df_sorted) - star_activated
+        approval_accepted = (appr_series == "accepted").sum()
+        approval_decline = (appr_series == "decline").sum()
+        approval_pending = len(df_sorted) - approval_accepted - approval_decline
+        stats = {
+            "active": bool(selected_schedule),
+            "star_activated": int(star_activated),
+            "star_not_activated": int(star_not_activated),
+            "approval_accepted": int(approval_accepted),
+            "approval_pending": int(approval_pending),
+            "approval_decline": int(approval_decline),
+        }
+
     rows = []
     for _, row in df_sorted.iterrows():
         # Normalize Starlink and approval text
@@ -266,7 +301,7 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
             }
         )
 
-    return rows, region_options, schedule_options
+    return rows, region_options, schedule_options, stats
 
 
 TEMPLATE = """
@@ -325,11 +360,12 @@ TEMPLATE = """
             box-sizing: border-box;
             flex: 1;                 /* take remaining space below header/meta */
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            gap: 8px;
             overflow: hidden;
         }
         .table-wrapper {
-            flex: 1;
+            flex: 3;
             overflow-y: auto;        /* scroll only table area */
         }
         table {
@@ -339,13 +375,17 @@ TEMPLATE = """
         }
         th, td {
             border: 1px solid #d0d7e2;
-            padding: 3px 5px;
+            padding: 2px 4px;
             text-align: center;
+            font-size: 11px;
         }
         th {
             background-color: #e5edf7;
             font-weight: 600;
             color: #25313d;
+            white-space: normal;           /* allow header text to wrap */
+            word-wrap: break-word;         /* break long tokens like 'Delivery/Installation' */
+            word-break: break-word;
         }
         tbody tr:nth-child(even) td {
             background-color: #f8fafc;
@@ -361,10 +401,74 @@ TEMPLATE = """
         .school-cell {
             text-align: left;
             padding-left: 6px;
+            white-space: normal;
+            word-wrap: break-word;
         }
         .status-cell {
             text-align: left;
             padding-left: 6px;
+            white-space: normal;
+            word-wrap: break-word;
+        }
+        .stats-card {
+            flex: 1;
+            max-width: 320px;
+            padding: 6px;
+            background: #ffffff;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+            font-size: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .stats-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #25313d;
+        }
+        .stats-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            overflow: hidden;
+        }
+        .stats-grid {
+            flex: 0 0 auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .stats-item {
+            min-width: 110px;
+            padding: 4px 6px;
+            border-radius: 4px;
+            background: #f8fafc;
+        }
+        .stats-label {
+            color: #6b7280;
+            font-size: 11px;
+        }
+        .stats-value {
+            font-weight: 700;
+            font-size: 14px;
+            color: #111827;
+        }
+        .stats-charts {
+            flex: 1;
+            display: flex;
+            flex-direction: column;  /* stack charts vertically */
+            gap: 6px;
+            align-items: center;
+            justify-content: center;
+        }
+        .stats-chart {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         .status-pill {
             display: inline-block;
@@ -419,8 +523,8 @@ TEMPLATE = """
                             <th>Region</th>
                             <th>Province</th>
                             <th>BEIS School ID</th>
-                        <th>Schedule of Delivery/Installation</th>
-                        <th>Start Time</th>
+                            <th>Schedule of Delivery/Installation</th>
+                            <th>Start Time</th>
                             <th>End Time</th>
                             <th>Installation Status</th>
                             <th>Starlink Status</th>
@@ -468,8 +572,119 @@ TEMPLATE = """
                     </tbody>
                 </table>
             </div>
+            {% if stats.active %}
+            <div class="stats-card">
+                <div class="stats-title">Summary for {{ selected_schedule }}</div>
+                <div class="stats-main">
+                    <div class="stats-grid">
+                        <div class="stats-item">
+                            <div class="stats-label">Starlink Activated</div>
+                            <div class="stats-value">{{ stats.star_activated }}</div>
+                        </div>
+                        <div class="stats-item">
+                            <div class="stats-label">Starlink Not Activated</div>
+                            <div class="stats-value">{{ stats.star_not_activated }}</div>
+                        </div>
+                        <div class="stats-item">
+                            <div class="stats-label">Approval Accepted</div>
+                            <div class="stats-value">{{ stats.approval_accepted }}</div>
+                        </div>
+                        <div class="stats-item">
+                            <div class="stats-label">Approval Pending / Blank</div>
+                            <div class="stats-value">{{ stats.approval_pending }}</div>
+                        </div>
+                        <div class="stats-item">
+                            <div class="stats-label">Approval Decline / Other</div>
+                            <div class="stats-value">{{ stats.approval_decline }}</div>
+                        </div>
+                    </div>
+                    <div class="stats-charts">
+                        <div class="stats-chart">
+                            <div class="stats-label">Starlink Status</div>
+                            <canvas id="starChart" style="width: 100%; max-width: 210px; height: 100px;"></canvas>
+                        </div>
+                        <div class="stats-chart">
+                            <div class="stats-label">Approval Status</div>
+                            <canvas id="approvalChart" style="width: 100%; max-width: 210px; height: 100px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </body>
 </html>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+    const active = {{ 'true' if stats.active else 'false' }};
+    if (!active) return;
+
+    // Starlink pie (Activated vs Not Activated)
+    const starEl = document.getElementById('starChart');
+    if (starEl) {
+        const starCtx = starEl.getContext('2d');
+        const starData = [{{ stats.star_activated }}, {{ stats.star_not_activated }}];
+        new Chart(starCtx, {
+            type: 'pie',
+            data: {
+                labels: ['Activated', 'Not Activated'],
+                datasets: [{
+                    data: starData,
+                    backgroundColor: [
+                        'rgba(22, 163, 74, 0.85)',  // green
+                        'rgba(220, 38, 38, 0.85)',  // red
+                    ],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, font: { size: 9 } }
+                    }
+                }
+            }
+        });
+    }
+
+    // Approval pie (Accepted / Pending / Decline)
+    const apprEl = document.getElementById('approvalChart');
+    if (apprEl) {
+        const apprCtx = apprEl.getContext('2d');
+        const apprData = [
+            {{ stats.approval_accepted }},
+            {{ stats.approval_pending }},
+            {{ stats.approval_decline }},
+        ];
+        new Chart(apprCtx, {
+            type: 'pie',
+            data: {
+                labels: ['Accepted', 'Pending/Blank', 'Decline/Other'],
+                datasets: [{
+                    data: apprData,
+                    backgroundColor: [
+                        'rgba(34, 197, 94, 0.85)',   // green
+                        'rgba(250, 204, 21, 0.9)',   // yellow
+                        'rgba(220, 38, 38, 0.85)',   // red
+                    ],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, font: { size: 9 } }
+                    }
+                }
+            }
+        });
+    }
+})();
+</script>
 """
