@@ -71,7 +71,7 @@ def _load_df(spreadsheet_id: str, sheet_name: str) -> pd.DataFrame:
 def load_starlink_df() -> pd.DataFrame:
     """Load BEIS School ID + activation status from the activation sheet."""
     df = _load_df(SPREADSHEET_ID_STARLINK, "Master")
-    required = ["BEIS School ID", "Status of Activation"]
+    required = ["BEIS School ID", "Status of Activation", "Approval (Accepted / Decline) "]
     if df.empty or any(col not in df.columns for col in required):
         return pd.DataFrame(columns=required)
 
@@ -81,6 +81,9 @@ def load_starlink_df() -> pd.DataFrame:
     df["BEIS School ID"] = df["BEIS School ID"].astype(str).str.strip()
     df["Status of Activation"] = (
         df["Status of Activation"].fillna("").astype(str).str.strip()
+    )
+    df["Approval (Accepted / Decline) "] = (
+        df["Approval (Accepted / Decline) "].fillna("").astype(str).str.strip()
     )
 
     # In case of duplicates, keep the last occurrence
@@ -177,6 +180,12 @@ def get_table_data(selected_region: str | None = None):
 
     rows = []
     for _, row in df_sorted.iterrows():
+        star = row["Starlink Status"]
+        if pd.isna(star):
+            star = ""
+        approval_raw = row.get("Approval (Accepted / Decline) ", "")
+        if pd.isna(approval_raw):
+            approval_raw = ""
         rows.append(
             {
                 "Region": row["Region"],
@@ -186,7 +195,8 @@ def get_table_data(selected_region: str | None = None):
                 "Start Time": row["Start Time"],
                 "End Time": row["End Time"],
                 "Installation Status": row["Installation Status"],
-                "Starlink Status": row["Starlink Status"],
+                "Starlink Status": star,
+                "Approval": approval_raw,
                 "Blocker": row[BLOCKER_COL],
             }
         )
@@ -291,6 +301,25 @@ TEMPLATE = """
             text-align: left;
             padding-left: 6px;
         }
+        .status-pill {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 11px;
+        }
+        .status-ok {
+            background-color: #16a34a;
+            color: #ffffff;
+        }
+        .status-bad {
+            background-color: #dc2626;
+            color: #ffffff;
+        }
+        .status-warn {
+            background-color: #facc15;
+            color: #1f2933;
+        }
     </style>
 </head>
 <body>
@@ -318,11 +347,12 @@ TEMPLATE = """
                             <th>Region</th>
                             <th>Province</th>
                             <th>BEIS School ID</th>
-                            <th>Schedule of Delivery/Installation</th>
-                            <th>Start Time</th>
+                        <th>Schedule of Delivery/Installation</th>
+                        <th>Start Time</th>
                             <th>End Time</th>
                             <th>Installation Status</th>
                             <th>Starlink Status</th>
+                            <th>Approval (Accepted / Decline)</th>
                             <th>Blocker (Supplier)</th>
                         </tr>
                     </thead>
@@ -336,7 +366,25 @@ TEMPLATE = """
                             <td>{{ row["Start Time"] }}</td>
                             <td>{{ row["End Time"] }}</td>
                             <td>{{ row["Installation Status"] }}</td>
-                            <td>{{ row["Starlink Status"] }}</td>
+                            {% set star = (row["Starlink Status"] or "") | lower %}
+                            <td>
+                                <span class="status-pill {% if star == 'activated' %}status-ok{% else %}status-bad{% endif %}">
+                                    {{ row["Starlink Status"] or 'Not Activated' }}
+                                </span>
+                            </td>
+                            {% set appr = (row["Approval"] or "") | lower %}
+                            <td>
+                                <span class="status-pill
+                                    {% if appr == 'accepted' %}
+                                        status-ok
+                                    {% elif appr == 'pending' or appr == '' %}
+                                        status-warn
+                                    {% else %}
+                                        status-bad
+                                    {% endif %}">
+                                    {{ row["Approval"] or 'Pending' }}
+                                </span>
+                            </td>
                             <td class="status-cell">{{ row["Blocker"] }}</td>
                         </tr>
                         {% endfor %}
