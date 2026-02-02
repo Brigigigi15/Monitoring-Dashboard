@@ -332,9 +332,10 @@ TEMPLATE = """
             margin: 0;
         }
         body {
-            font-family: Arial, sans-serif;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             font-size: 12px;
-            background: #f1f5f9;
+            background: radial-gradient(circle at top left, #d4e0ff 0, #dde4f0 40%, #d4d4dd 100%);
+            color: #020617;
             overflow: hidden; /* prevent whole-page scrolling */
         }
         .page {
@@ -349,7 +350,12 @@ TEMPLATE = """
         h1 {
             margin: 4px 0 6px 0;
             font-size: 20px;
-            color: #1f2933;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #0f172a, #0284c7, #0f172a);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
         }
         .meta-line {
             font-size: 11px;
@@ -362,6 +368,10 @@ TEMPLATE = """
             gap: 8px;
             margin-bottom: 6px;
             font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.85);
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.10);
         }
         .filter-bar label {
             color: #4b5563;
@@ -369,15 +379,29 @@ TEMPLATE = """
         }
         .filter-bar select {
             font-size: 12px;
-            padding: 2px 8px;
+            padding: 3px 10px;
             border-radius: 9999px;
-            border: 1px solid #d0d7e2;
+            border: 1px solid rgba(148, 163, 184, 0.7);
             background-color: #ffffff;
+            color: #111827;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+            appearance: none;
+        }
+        .filter-bar select:focus {
+            outline: none;
+            border-color: #38bdf8;
+            box-shadow:
+                0 0 0 1px rgba(56, 189, 248, 0.7),
+                0 4px 10px rgba(56, 189, 248, 0.25);
+        }
+        .filter-bar select:hover {
+            border-color: #0ea5e9;
         }
         .card {
-            background: #ffffff;
-            border-radius: 6px;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+            background: linear-gradient(135deg, #f9fafb 0%, #e2e8f0 40%, #cbd5f5 100%);
+            border-radius: 10px;
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.30);
+            border: 1px solid rgba(71, 85, 105, 0.55);
             padding: 8px;
             box-sizing: border-box;
             flex: 1;                 /* take remaining space below header/meta */
@@ -396,15 +420,15 @@ TEMPLATE = """
             table-layout: fixed;
         }
         th, td {
-            border: 1px solid #d0d7e2;
+            border: 1px solid #cbd5e1;
             padding: 2px 4px;
             text-align: center;
             font-size: 11px;
         }
         th {
-            background-color: #e5edf7;
+            background-color: #cbd5f5;
             font-weight: 600;
-            color: #25313d;
+            color: #020617;
             white-space: normal;           /* allow header text to wrap */
             word-wrap: break-word;         /* break long tokens like 'Delivery/Installation' */
             word-break: break-word;
@@ -415,16 +439,19 @@ TEMPLATE = """
             z-index: 2;
         }
         tbody tr:nth-child(even) td {
-            background-color: #f8fafc;
+            background-color: #f9fafb;
+        }
+        tbody tr:nth-child(odd) td {
+            background-color: #ffffff;
         }
         tbody tr:hover td {
             background-color: #e5f0ff;
         }
         .row-warning td {
-            background-color: #fef9c3;
+            background-color: #fff7d6;
         }
         .row-critical td {
-            background-color: #fee2e2;
+            background-color: #ffe4e6;
         }
         .region-cell {
             text-align: left;
@@ -446,26 +473,36 @@ TEMPLATE = """
         .stats-card {
             flex: 1;
             max-width: 320px;
-            padding: 6px;
-            background: #ffffff;
-            border-radius: 6px;
-            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+            padding: 8px;
+            background: linear-gradient(135deg, #cbd5f5 0%, #e2e8f0 40%, #f9fafb 100%);
+            border-radius: 10px;
+            box-shadow:
+                0 0 0 1px rgba(71, 85, 105, 0.65),
+                0 20px 50px rgba(15, 23, 42, 0.32);
             font-size: 12px;
             overflow: hidden;
             display: flex;
             flex-direction: column;
         }
         .stats-title {
-            font-weight: 600;
-            margin-bottom: 4px;
-            color: #25313d;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #0f172a;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
         }
         .stats-main {
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
             overflow: hidden;
+        }
+        .stats-note {
+            font-size: 11px;
+            font-weight: 600;
+            color: #020617;
+            margin-bottom: 6px;
         }
         .stats-grid {
             flex: 0 0 auto;
@@ -476,17 +513,19 @@ TEMPLATE = """
         .stats-item {
             min-width: 110px;
             padding: 4px 6px;
-            border-radius: 4px;
-            background: #f8fafc;
+            border-radius: 6px;
+            background: #e0e7ff;
+            border: 1px solid rgba(79, 70, 229, 0.8);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.20);
         }
         .stats-label {
-            color: #6b7280;
+            color: #4b5563;
             font-size: 11px;
         }
         .stats-value {
             font-weight: 700;
             font-size: 14px;
-            color: #111827;
+            color: #0f172a;
         }
         .stats-charts {
             flex: 1;
@@ -505,21 +544,23 @@ TEMPLATE = """
         }
         .status-pill {
             display: inline-block;
-            padding: 2px 6px;
+            padding: 2px 8px;
             border-radius: 9999px;
             font-weight: 600;
             font-size: 11px;
+            letter-spacing: 0.02em;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
         }
         .status-ok {
-            background-color: #16a34a;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
             color: #ffffff;
         }
         .status-bad {
-            background-color: #dc2626;
+            background: linear-gradient(135deg, #f97373, #dc2626);
             color: #ffffff;
         }
         .status-warn {
-            background-color: #facc15;
+            background: linear-gradient(135deg, #fde68a, #facc15);
             color: #1f2933;
         }
     </style>
@@ -621,6 +662,9 @@ TEMPLATE = """
                 <div class="stats-title">
                     Summary for {{ selected_schedule or 'All Schedules' }}
                 </div>
+                <div class="stats-note">
+                    This statistics is for the sites with schedules only.
+                </div>
                 <div class="stats-main">
                     <div class="stats-grid">
                         <div class="stats-item">
@@ -647,11 +691,11 @@ TEMPLATE = """
                     <div class="stats-charts">
                         <div class="stats-chart">
                             <div class="stats-label">Starlink Status</div>
-                            <canvas id="starChart" style="width: 100%; max-width: 210px; height: 100px;"></canvas>
+                            <canvas id="starChart" style="width: 100%; max-width: 190px; height: 90px;"></canvas>
                         </div>
                         <div class="stats-chart">
                             <div class="stats-label">Approval Status</div>
-                            <canvas id="approvalChart" style="width: 100%; max-width: 210px; height: 100px;"></canvas>
+                            <canvas id="approvalChart" style="width: 100%; max-width: 190px; height: 90px;"></canvas>
                         </div>
                     </div>
                 </div>
