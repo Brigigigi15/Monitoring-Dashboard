@@ -134,11 +134,11 @@ def load_main_df() -> pd.DataFrame:
     return df
 
 
-def get_table_data(selected_region: str | None = None):
-    """Return rows and region options for the dashboard."""
+def get_table_data(selected_region: str | None = None, selected_schedule: str | None = None):
+    """Return rows and filter options for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
-        return [], []
+        return [], [], []
 
     df_star = load_starlink_df()
 
@@ -162,10 +162,30 @@ def get_table_data(selected_region: str | None = None):
     df_merged["Schedule_sort"] = pd.to_datetime(
         df_merged["Schedule"], errors="coerce", dayfirst=False
     )
+    # Parse times for better ordering within a day
+    df_merged["Start_sort"] = pd.to_datetime(
+        df_merged["Start Time"], errors="coerce", format="%I:%M %p"
+    )
+    df_merged["End_sort"] = pd.to_datetime(
+        df_merged["End Time"], errors="coerce", format="%I:%M %p"
+    )
 
-    # Sort by earliest schedule date first, then by region/province/school
+    # Build a consistent display string for schedule dates, e.g. "Feb. 02, 2026"
+    def _format_schedule(row):
+        ts = row.get("Schedule_sort")
+        s = row["Schedule"]
+        if pd.notna(ts):
+            try:
+                return ts.strftime("%b. %d, %Y")
+            except Exception:
+                return s
+        return s
+
+    df_merged["Schedule_display"] = df_merged.apply(_format_schedule, axis=1)
+
+    # Sort by earliest schedule date, then start/end time, then by region/province/school
     df_sorted = df_merged.sort_values(
-        by=["Schedule_sort", "Region", "Province", "BEIS School ID"],
+        by=["Schedule_sort", "Start_sort", "End_sort", "Region", "Province", "BEIS School ID"],
         kind="stable",
     )
 
@@ -173,10 +193,19 @@ def get_table_data(selected_region: str | None = None):
     region_options = sorted(
         r for r in df_sorted["Region"].astype(str).unique() if r.strip()
     )
+    # All distinct schedule display values for filter options, ordered by date
+    sched_unique = (
+        df_sorted[["Schedule_display", "Schedule_sort"]]
+        .drop_duplicates()
+        .sort_values(["Schedule_sort", "Schedule_display"])
+    )
+    schedule_options = [s for s in sched_unique["Schedule_display"].tolist() if s]
 
-    # Optional filter by selected_region
+    # Optional filters
     if selected_region:
         df_sorted = df_sorted[df_sorted["Region"] == selected_region]
+    if selected_schedule:
+        df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
 
     rows = []
     for _, row in df_sorted.iterrows():
@@ -202,7 +231,7 @@ def get_table_data(selected_region: str | None = None):
                 "Region": row["Region"],
                 "Province": row["Province"],
                 "BEIS School ID": row["BEIS School ID"],
-                "Schedule": schedule_display,
+                "Schedule": row["Schedule_display"],
                 "Start Time": row["Start Time"],
                 "End Time": row["End Time"],
                 "Installation Status": row["Installation Status"],
@@ -212,7 +241,7 @@ def get_table_data(selected_region: str | None = None):
             }
         )
 
-    return rows, region_options
+    return rows, region_options, schedule_options
 
 
 TEMPLATE = """
@@ -346,6 +375,13 @@ TEMPLATE = """
                 <option value="">All Regions</option>
                 {% for r in region_options %}
                 <option value="{{ r }}" {% if selected_region == r %}selected{% endif %}>{{ r }}</option>
+                {% endfor %}
+            </select>
+            <label for="schedule-select">Schedule:</label>
+            <select id="schedule-select" name="schedule" onchange="this.form.submit()">
+                <option value="">All Dates</option>
+                {% for d in schedule_options %}
+                <option value="{{ d }}" {% if selected_schedule == d %}selected{% endif %}>{{ d }}</option>
                 {% endfor %}
             </select>
         </form>
