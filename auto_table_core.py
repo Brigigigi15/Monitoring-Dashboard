@@ -140,6 +140,7 @@ def load_main_df() -> pd.DataFrame:
 def get_table_data(
     selected_region: str | None = None,
     selected_schedule: str | None = None,
+    selected_installation: str | None = None,
     selected_tile: str | None = None,
 ):
     """Return rows, filter options, and stats for the dashboard."""
@@ -257,11 +258,25 @@ def get_table_data(
     )
     schedule_options = [s for s in sched_unique["Schedule_display"].tolist() if s]
 
+    # All distinct installation statuses for filter options
+    inst_unique = (
+        df_sorted["Installation Status"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .unique()
+    )
+    installation_options = sorted(inst_unique.tolist())
+
     # Optional filters
     if selected_region:
         df_sorted = df_sorted[df_sorted["Region"] == selected_region]
     if selected_schedule:
         df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
+    if selected_installation:
+        df_sorted = df_sorted[df_sorted["Installation Status"] == selected_installation]
 
     # Build stats based on the filtered set (for selected schedule/region)
     if df_sorted.empty:
@@ -397,7 +412,7 @@ def get_table_data(
             }
         )
 
-    return rows, region_options, schedule_options, stats
+    return rows, region_options, schedule_options, installation_options, stats
 
 
 TEMPLATE = """
@@ -784,6 +799,13 @@ TEMPLATE = """
                 <option value="{{ d }}" {% if selected_schedule == d %}selected{% endif %}>{{ d }}</option>
                 {% endfor %}
             </select>
+            <label for="installation-select">Installation:</label>
+            <select id="installation-select" name="installation" onchange="this.form.submit()">
+                <option value="">All Installation Statuses</option>
+                {% for inst in installation_options %}
+                <option value="{{ inst }}" {% if selected_installation == inst %}selected{% endif %}>{{ inst }}</option>
+                {% endfor %}
+            </select>
         </form>
 
         <div class="card">
@@ -872,7 +894,7 @@ TEMPLATE = """
                 {% if selected_tile %}
                 <div class="stats-filter-note">
                     Status filter applied.
-                    <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}" class="stats-filter-clear">
+                    <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}" class="stats-filter-clear">
                         Clear filter
                     </a>
                 </div>
@@ -880,43 +902,43 @@ TEMPLATE = """
                 <div class="stats-main">
                     <div class="stats-grid">
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=star_activated" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=star_activated" class="stats-tile-link">
                                 <div class="stats-label">✔ Starlink Activated</div>
                                 <div class="stats-value">{{ stats.star_activated }}</div>
                             </a>
                         </div>
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=star_not_activated" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=star_not_activated" class="stats-tile-link">
                                 <div class="stats-label">⚠ Starlink Not Activated</div>
                                 <div class="stats-value">{{ stats.star_not_activated }}</div>
                             </a>
                         </div>
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=approval_accepted" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=approval_accepted" class="stats-tile-link">
                                 <div class="stats-label">✔ Approval Accepted</div>
                                 <div class="stats-value">{{ stats.approval_accepted }}</div>
                             </a>
                         </div>
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=approval_pending" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=approval_pending" class="stats-tile-link">
                                 <div class="stats-label">⚠ Approval Pending / Blank</div>
                                 <div class="stats-value">{{ stats.approval_pending }}</div>
                             </a>
                         </div>
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=approval_decline" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=approval_decline" class="stats-tile-link">
                                 <div class="stats-label">✖ Approval Decline / Other</div>
                                 <div class="stats-value">{{ stats.approval_decline }}</div>
                             </a>
                         </div>
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=calendar_sent" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=calendar_sent" class="stats-tile-link">
                                 <div class="stats-label">✔ Calendar Sent</div>
                                 <div class="stats-value">{{ stats.calendar_sent }}</div>
                             </a>
                         </div>
                         <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=calendar_not_sent" class="stats-tile-link">
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=calendar_not_sent" class="stats-tile-link">
                                 <div class="stats-label">✖ Calendar Invite Not Sent</div>
                                 <div class="stats-value">{{ stats.calendar_not_sent }}</div>
                             </a>
