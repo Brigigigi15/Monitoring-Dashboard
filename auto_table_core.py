@@ -180,18 +180,29 @@ def get_table_data(selected_region: str | None = None):
 
     rows = []
     for _, row in df_sorted.iterrows():
+        # Normalize Starlink and approval text
         star = row["Starlink Status"]
         if pd.isna(star):
             star = ""
         approval_raw = row.get("Approval (Accepted / Decline) ", "")
         if pd.isna(approval_raw):
             approval_raw = ""
+
+        # Normalize schedule display to a consistent text format, e.g. "Feb. 02, 2026"
+        schedule_display = row["Schedule"]
+        ts = row.get("Schedule_sort")
+        if pd.notna(ts):
+            try:
+                schedule_display = ts.strftime("%b. %d, %Y")  # e.g. "Feb. 02, 2026"
+            except Exception:
+                # Fallback to original string if formatting fails
+                schedule_display = row["Schedule"]
         rows.append(
             {
                 "Region": row["Region"],
                 "Province": row["Province"],
                 "BEIS School ID": row["BEIS School ID"],
-                "Schedule": row["Schedule"],
+                "Schedule": schedule_display,
                 "Start Time": row["Start Time"],
                 "End Time": row["End Time"],
                 "Installation Status": row["Installation Status"],
