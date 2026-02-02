@@ -8,6 +8,7 @@ app = Flask(__name__)
 
 
 @app.route("/", methods=["GET"])
+@app.route("/api", methods=["GET"])
 def index():
     selected_region = request.args.get("region", "").strip() or None
     rows, region_options = get_table_data(selected_region)
@@ -21,4 +22,3 @@ def index():
 
 
 # On Vercel, the `app` object is used as the WSGI entrypoint.
-
