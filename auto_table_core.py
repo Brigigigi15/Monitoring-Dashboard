@@ -148,6 +148,8 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
             "approval_accepted": 0,
             "approval_pending": 0,
             "approval_decline": 0,
+            "calendar_sent": 0,
+            "calendar_not_sent": 0,
         }
 
     df_star = load_starlink_df()
@@ -266,6 +268,8 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
             "approval_accepted": 0,
             "approval_pending": 0,
             "approval_decline": 0,
+            "calendar_sent": 0,
+            "calendar_not_sent": 0,
         }
     else:
         star_series = (
@@ -273,6 +277,13 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
         )
         appr_series = (
             df_sorted["Approval (Accepted / Decline) "]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        cal_series = (
+            df_sorted.get("Calendar Status", "")
             .fillna("")
             .astype(str)
             .str.strip()
@@ -291,6 +302,11 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
         approval_accepted = accepted_mask.sum()
         approval_decline = decline_mask.sum()
         approval_pending = len(df_sorted) - approval_accepted - approval_decline
+
+        # Calendar status: Sent vs Invite Not Sent
+        calendar_sent = (cal_series == "sent").sum()
+        calendar_not_sent = (cal_series == "invite not sent").sum()
+
         stats = {
             "active": True,  # show stats for overall or filtered
             "star_activated": int(star_activated),
@@ -298,6 +314,8 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
             "approval_accepted": int(approval_accepted),
             "approval_pending": int(approval_pending),
             "approval_decline": int(approval_decline),
+            "calendar_sent": int(calendar_sent),
+            "calendar_not_sent": int(calendar_not_sent),
         }
 
     rows = []
@@ -491,8 +509,8 @@ TEMPLATE = """
         }
         .stats-card {
             flex: 1;
-            max-width: 320px;
-            padding: 8px;
+            max-width: 360px;
+            padding: 6px;
             background: linear-gradient(135deg, #cbd5f5 0%, #e2e8f0 40%, #f9fafb 100%);
             border-radius: 10px;
             box-shadow:
@@ -515,7 +533,7 @@ TEMPLATE = """
             flex: 1;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 4px;
             overflow: hidden;
         }
         .stats-note {
@@ -524,39 +542,85 @@ TEMPLATE = """
             color: #020617;
             margin-bottom: 6px;
         }
+        .stats-calendar-summary {
+            font-size: 10px;
+            color: #374151;
+            margin-bottom: 4px;
+        }
         .stats-grid {
             flex: 0 0 auto;
             display: flex;
             flex-wrap: wrap;
-            gap: 8px;
+            justify-content: center;
+            gap: 4px;
         }
         .stats-item {
-            min-width: 110px;
-            padding: 4px 6px;
+            flex: 0 0 calc(33.333% - 6px); /* three columns on wide screens */
             border-radius: 6px;
             background: #e0e7ff;
             border: 1px solid rgba(79, 70, 229, 0.8);
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.20);
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
+            padding: 3px 4px;
+            text-align: center;
         }
         .stats-label {
             color: #4b5563;
-            font-size: 11px;
+            font-size: 9px;
+            text-align: center;
         }
         .stats-value {
             font-weight: 700;
-            font-size: 14px;
+            font-size: 11px;
             color: #0f172a;
+            text-align: center;
+        }
+        /* Color tiles by type (using fixed order) */
+        .stats-grid .stats-item:nth-child(1),
+        .stats-grid .stats-item:nth-child(3),
+        .stats-grid .stats-item:nth-child(6) {
+            /* ✔ tiles: Starlink Activated, Approval Accepted, Calendar Sent */
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+        .stats-grid .stats-item:nth-child(1) .stats-label,
+        .stats-grid .stats-item:nth-child(1) .stats-value,
+        .stats-grid .stats-item:nth-child(3) .stats-label,
+        .stats-grid .stats-item:nth-child(3) .stats-value,
+        .stats-grid .stats-item:nth-child(6) .stats-label,
+        .stats-grid .stats-item:nth-child(6) .stats-value {
+            color: #ffffff;
+        }
+        .stats-grid .stats-item:nth-child(2),
+        .stats-grid .stats-item:nth-child(4) {
+            /* ⚠ tiles: Starlink Not Activated, Approval Pending/Blank */
+            background: linear-gradient(135deg, #fde68a, #facc15);
+        }
+        .stats-grid .stats-item:nth-child(2) .stats-label,
+        .stats-grid .stats-item:nth-child(2) .stats-value,
+        .stats-grid .stats-item:nth-child(4) .stats-label,
+        .stats-grid .stats-item:nth-child(4) .stats-value {
+            color: #1f2933;
+        }
+        .stats-grid .stats-item:nth-child(5),
+        .stats-grid .stats-item:nth-child(7) {
+            /* ✖ tiles: Approval Decline, Calendar Invite Not Sent */
+            background: linear-gradient(135deg, #f97373, #dc2626);
+        }
+        .stats-grid .stats-item:nth-child(5) .stats-label,
+        .stats-grid .stats-item:nth-child(5) .stats-value,
+        .stats-grid .stats-item:nth-child(7) .stats-label,
+        .stats-grid .stats-item:nth-child(7) .stats-value {
+            color: #ffffff;
         }
         .stats-charts {
-            flex: 1;
+            flex: 0 0 auto;
             display: flex;
             flex-direction: column;  /* stack charts vertically */
-            gap: 6px;
+            gap: 4px;
             align-items: center;
             justify-content: center;
         }
         .stats-chart {
-            flex: 1;
+            flex: 0 0 auto;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -620,6 +684,9 @@ TEMPLATE = """
             .stats-card {
                 max-width: none;
                 margin-top: 8px;
+            }
+            .stats-item {
+                flex: 0 0 calc(50% - 4px); /* two columns on narrow screens */
             }
         }
     </style>
@@ -757,6 +824,14 @@ TEMPLATE = """
                         <div class="stats-item">
                             <div class="stats-label">✖ Approval Decline / Other</div>
                             <div class="stats-value">{{ stats.approval_decline }}</div>
+                        </div>
+                        <div class="stats-item">
+                            <div class="stats-label">✔ Calendar Sent</div>
+                            <div class="stats-value">{{ stats.calendar_sent }}</div>
+                        </div>
+                        <div class="stats-item">
+                            <div class="stats-label">✖ Calendar Invite Not Sent</div>
+                            <div class="stats-value">{{ stats.calendar_not_sent }}</div>
                         </div>
                     </div>
                     <div class="stats-charts">
