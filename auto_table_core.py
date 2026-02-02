@@ -69,17 +69,19 @@ def _load_df(spreadsheet_id: str, sheet_name: str) -> pd.DataFrame:
 
 
 def load_starlink_df() -> pd.DataFrame:
-    """Load BEIS School ID + Starlink Status from the activation sheet."""
+    """Load BEIS School ID + activation status from the activation sheet."""
     df = _load_df(SPREADSHEET_ID_STARLINK, "Master")
     required = ["BEIS School ID", "Status of Activation"]
     if df.empty or any(col not in df.columns for col in required):
         return pd.DataFrame(columns=required)
 
     df = df[required].copy()
-    # Normalize column name so the rest of the code can use "Starlink Status"
-    df = df.rename(columns={"Status of Activation": "Starlink Status"})
+    # Drop duplicate "Status of Activation" columns, keep the first
+    df = df.loc[:, ~df.columns.duplicated()]
     df["BEIS School ID"] = df["BEIS School ID"].astype(str).str.strip()
-    df["Starlink Status"] = df["Starlink Status"].fillna("").astype(str).str.strip()
+    df["Status of Activation"] = (
+        df["Status of Activation"].fillna("").astype(str).str.strip()
+    )
 
     # In case of duplicates, keep the last occurrence
     df = df.replace({"": pd.NA}).dropna(subset=["BEIS School ID"]).drop_duplicates(
@@ -137,11 +139,12 @@ def get_table_data(selected_region: str | None = None):
 
     df_star = load_starlink_df()
 
-    # Join Starlink Status from first sheet by BEIS School ID
+    # Join Starlink activation status by BEIS School ID
     if not df_star.empty:
         df_merged = df_main.merge(
             df_star, on="BEIS School ID", how="left", suffixes=("", "_starlink")
         )
+        df_merged["Starlink Status"] = df_merged["Status of Activation"]
     else:
         df_merged = df_main.copy()
         df_merged["Starlink Status"] = ""
