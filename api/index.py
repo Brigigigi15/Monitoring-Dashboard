@@ -7,9 +7,10 @@ from auto_table_core import TEMPLATE, get_table_data
 app = Flask(__name__)
 
 
-@app.route("/", methods=["GET"])
-@app.route("/api", methods=["GET"])
-def index():
+@app.route("/", defaults={"path": ""}, methods=["GET"])
+@app.route("/<path:path>", methods=["GET"])
+def index(path: str):
+    # Single handler for any path within this function (/, /api, /api/index, etc.)
     selected_region = request.args.get("region", "").strip() or None
     rows, region_options = get_table_data(selected_region)
     return render_template_string(
