@@ -137,7 +137,11 @@ def load_main_df() -> pd.DataFrame:
     return df
 
 
-def get_table_data(selected_region: str | None = None, selected_schedule: str | None = None):
+def get_table_data(
+    selected_region: str | None = None,
+    selected_schedule: str | None = None,
+    selected_tile: str | None = None,
+):
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
@@ -289,34 +293,74 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
             .str.strip()
             .str.lower()
         )
-        # Starlink: only "activated" vs everything else
-        star_activated = (star_series == "activated").sum()
-        star_not_activated = len(df_sorted) - star_activated
 
-        # Approval:
-        # treat any value containing "accept" as accepted,
-        # any value containing "declin" (decline/declined) as decline,
-        # the rest (including blank/pending/others) as pending/blank.
-        accepted_mask = appr_series.str.contains("accept", na=False)
-        decline_mask = appr_series.str.contains("declin", na=False)
-        approval_accepted = accepted_mask.sum()
-        approval_decline = decline_mask.sum()
-        approval_pending = len(df_sorted) - approval_accepted - approval_decline
+        # Apply tile-based filter if requested
+        tile = (selected_tile or "").strip()
+        if tile:
+            mask = pd.Series(True, index=df_sorted.index)
+            if tile == "star_activated":
+                mask = star_series == "activated"
+            elif tile == "star_not_activated":
+                mask = star_series != "activated"
+            elif tile == "approval_accepted":
+                mask = appr_series.str.contains("accept", na=False)
+            elif tile == "approval_pending":
+                # not accepted and not decline => pending/blank/other
+                accepted_mask_tmp = appr_series.str.contains("accept", na=False)
+                decline_mask_tmp = appr_series.str.contains("declin", na=False)
+                mask = ~accepted_mask_tmp & ~decline_mask_tmp
+            elif tile == "approval_decline":
+                mask = appr_series.str.contains("declin", na=False)
+            elif tile == "calendar_sent":
+                mask = cal_series == "sent"
+            elif tile == "calendar_not_sent":
+                mask = cal_series == "invite not sent"
+            df_sorted = df_sorted[mask]
+            # Recompute series for stats on the filtered set
+            star_series = star_series[mask]
+            appr_series = appr_series[mask]
+            cal_series = cal_series[mask]
 
-        # Calendar status: Sent vs Invite Not Sent
-        calendar_sent = (cal_series == "sent").sum()
-        calendar_not_sent = (cal_series == "invite not sent").sum()
+        if df_sorted.empty:
+            stats = {
+                "active": False,
+                "star_activated": 0,
+                "star_not_activated": 0,
+                "approval_accepted": 0,
+                "approval_pending": 0,
+                "approval_decline": 0,
+                "calendar_sent": 0,
+                "calendar_not_sent": 0,
+            }
+        else:
+            # Starlink: only "activated" vs everything else
+            star_activated = (star_series == "activated").sum()
+            star_not_activated = len(df_sorted) - star_activated
 
-        stats = {
-            "active": True,  # show stats for overall or filtered
-            "star_activated": int(star_activated),
-            "star_not_activated": int(star_not_activated),
-            "approval_accepted": int(approval_accepted),
-            "approval_pending": int(approval_pending),
-            "approval_decline": int(approval_decline),
-            "calendar_sent": int(calendar_sent),
-            "calendar_not_sent": int(calendar_not_sent),
-        }
+            # Approval:
+            # treat any value containing "accept" as accepted,
+            # any value containing "declin" (decline/declined) as decline,
+            # the rest (including blank/pending/others) as pending/blank.
+            accepted_mask = appr_series.str.contains("accept", na=False)
+            decline_mask = appr_series.str.contains("declin", na=False)
+            approval_accepted = accepted_mask.sum()
+            approval_decline = decline_mask.sum()
+            approval_pending = len(df_sorted) - approval_accepted - approval_decline
+
+            # Calendar status: Sent vs Invite Not Sent
+            calendar_sent = (cal_series == "sent").sum()
+            calendar_not_sent = (cal_series == "invite not sent").sum()
+
+            stats = {
+                "active": True,  # show stats for overall or filtered
+                "star_activated": int(star_activated),
+                "star_not_activated": int(star_not_activated),
+                "approval_accepted": int(approval_accepted),
+                "approval_pending": int(approval_pending),
+                "approval_decline": int(approval_decline),
+                "calendar_sent": int(calendar_sent),
+                "calendar_not_sent": int(calendar_not_sent),
+            }
 
     rows = []
     for _, row in df_sorted.iterrows():
@@ -544,6 +588,21 @@ TEMPLATE = """
             text-align: center;
             margin-bottom: 8px;
         }
+        .stats-filter-note {
+            font-size: 10px;
+            color: #4b5563;
+            text-align: center;
+            margin-bottom: 6px;
+        }
+        .stats-filter-clear {
+            margin-left: 6px;
+            font-size: 10px;
+            color: #0ea5e9;
+            text-decoration: none;
+        }
+        .stats-filter-clear:hover {
+            text-decoration: underline;
+        }
         .stats-calendar-summary {
             font-size: 10px;
             color: #374151;
@@ -564,6 +623,11 @@ TEMPLATE = """
             box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
             padding: 3px 4px;
             text-align: center;
+        }
+        .stats-tile-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
         }
         .stats-label {
             color: #4b5563;
@@ -805,35 +869,57 @@ TEMPLATE = """
                 <div class="stats-note">
                     This is for the sites with schedules only.
                 </div>
+                {% if selected_tile %}
+                <div class="stats-filter-note">
+                    Status filter applied.
+                    <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}" class="stats-filter-clear">
+                        Clear filter
+                    </a>
+                </div>
+                {% endif %}
                 <div class="stats-main">
                     <div class="stats-grid">
                         <div class="stats-item">
-                            <div class="stats-label">✔ Starlink Activated</div>
-                            <div class="stats-value">{{ stats.star_activated }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=star_activated" class="stats-tile-link">
+                                <div class="stats-label">✔ Starlink Activated</div>
+                                <div class="stats-value">{{ stats.star_activated }}</div>
+                            </a>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">⚠ Starlink Not Activated</div>
-                            <div class="stats-value">{{ stats.star_not_activated }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=star_not_activated" class="stats-tile-link">
+                                <div class="stats-label">⚠ Starlink Not Activated</div>
+                                <div class="stats-value">{{ stats.star_not_activated }}</div>
+                            </a>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">✔ Approval Accepted</div>
-                            <div class="stats-value">{{ stats.approval_accepted }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=approval_accepted" class="stats-tile-link">
+                                <div class="stats-label">✔ Approval Accepted</div>
+                                <div class="stats-value">{{ stats.approval_accepted }}</div>
+                            </a>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">⚠ Approval Pending / Blank</div>
-                            <div class="stats-value">{{ stats.approval_pending }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=approval_pending" class="stats-tile-link">
+                                <div class="stats-label">⚠ Approval Pending / Blank</div>
+                                <div class="stats-value">{{ stats.approval_pending }}</div>
+                            </a>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">✖ Approval Decline / Other</div>
-                            <div class="stats-value">{{ stats.approval_decline }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=approval_decline" class="stats-tile-link">
+                                <div class="stats-label">✖ Approval Decline / Other</div>
+                                <div class="stats-value">{{ stats.approval_decline }}</div>
+                            </a>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">✔ Calendar Sent</div>
-                            <div class="stats-value">{{ stats.calendar_sent }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=calendar_sent" class="stats-tile-link">
+                                <div class="stats-label">✔ Calendar Sent</div>
+                                <div class="stats-value">{{ stats.calendar_sent }}</div>
+                            </a>
                         </div>
                         <div class="stats-item">
-                            <div class="stats-label">✖ Calendar Invite Not Sent</div>
-                            <div class="stats-value">{{ stats.calendar_not_sent }}</div>
+                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&tile=calendar_not_sent" class="stats-tile-link">
+                                <div class="stats-label">✖ Calendar Invite Not Sent</div>
+                                <div class="stats-value">{{ stats.calendar_not_sent }}</div>
+                            </a>
                         </div>
                     </div>
                     <div class="stats-charts">
