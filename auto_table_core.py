@@ -339,7 +339,7 @@ TEMPLATE = """
             overflow: hidden; /* prevent whole-page scrolling */
         }
         .page {
-            max-width: 1200px;
+            max-width: 1400px;
             height: 100%;
             margin: 0 auto;
             padding: 10px;
@@ -480,7 +480,8 @@ TEMPLATE = """
                 0 0 0 1px rgba(71, 85, 105, 0.65),
                 0 20px 50px rgba(15, 23, 42, 0.32);
             font-size: 12px;
-            overflow: hidden;
+            overflow-y: auto;
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
         }
@@ -562,6 +563,30 @@ TEMPLATE = """
         .status-warn {
             background: linear-gradient(135deg, #fde68a, #facc15);
             color: #1f2933;
+        }
+
+        /* Responsive tweaks for smaller viewports */
+        @media (max-width: 900px) {
+            html, body {
+                height: auto;
+            }
+            body {
+                overflow-y: auto;
+            }
+            .page {
+                height: auto;
+            }
+            .card {
+                flex-direction: column;
+            }
+            .table-wrapper {
+                flex: none;
+                max-height: 55vh;
+            }
+            .stats-card {
+                max-width: none;
+                margin-top: 8px;
+            }
         }
     </style>
 </head>
@@ -691,11 +716,11 @@ TEMPLATE = """
                     <div class="stats-charts">
                         <div class="stats-chart">
                             <div class="stats-label">Starlink Status</div>
-                            <canvas id="starChart" style="width: 100%; max-width: 190px; height: 90px;"></canvas>
+                            <canvas id="starChart" style="width: 100%; max-width: 180px; height: 80px;"></canvas>
                         </div>
                         <div class="stats-chart">
                             <div class="stats-label">Approval Status</div>
-                            <canvas id="approvalChart" style="width: 100%; max-width: 190px; height: 90px;"></canvas>
+                            <canvas id="approvalChart" style="width: 100%; max-width: 180px; height: 80px;"></canvas>
                         </div>
                     </div>
                 </div>
@@ -734,7 +759,7 @@ TEMPLATE = """
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { boxWidth: 10, font: { size: 9 } }
+                        labels: { boxWidth: 8, font: { size: 8 } }
                     }
                 }
             }
@@ -769,7 +794,7 @@ TEMPLATE = """
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: { boxWidth: 10, font: { size: 9 } }
+                        labels: { boxWidth: 8, font: { size: 8 } }
                     }
                 }
             }
