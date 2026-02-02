@@ -113,6 +113,7 @@ def load_main_df() -> pd.DataFrame:
         "End Time",
         OUTCOME_COL,
         BLOCKER_COL,
+        "Status of Calendar",
     ]
     if df.empty or any(col not in df.columns for col in required):
         return pd.DataFrame(columns=required)
@@ -126,6 +127,8 @@ def load_main_df() -> pd.DataFrame:
     # Clean schedule, outcome, blocker
     df[SCHEDULE_COL] = df[SCHEDULE_COL].fillna("").astype(str).str.strip()
     df[OUTCOME_COL] = df[OUTCOME_COL].fillna("").astype(str).str.strip()
+    df[BLOCKER_COL] = df[BLOCKER_COL].fillna("").astype(str).str.strip()
+    df["Status of Calendar"] = df["Status of Calendar"].fillna("").astype(str).str.strip()
     df[BLOCKER_COL] = df[BLOCKER_COL].fillna("").astype(str).str.strip()
 
     # Only keep rows where schedule has a value
@@ -161,6 +164,21 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
 
     # Installation Status derived from Outcome Status (for now, just mirror it)
     df_merged["Installation Status"] = df_merged[OUTCOME_COL]
+
+    # Calendar status derived from "Status of Calendar"
+    def _map_calendar_status(val: str) -> str:
+        v = (val or "").strip()
+        if not v:
+            return ""
+        if v == "Invite Sent":
+            return "Sent"
+        # Any other non-empty value is treated as "Invite Not Sent"
+        return "Invite Not Sent"
+
+    if "Status of Calendar" in df_merged.columns:
+        df_merged["Calendar Status"] = df_merged["Status of Calendar"].apply(_map_calendar_status)
+    else:
+        df_merged["Calendar Status"] = ""
 
     # Expose cleaned schedule as a simple field (string)
     df_merged["Schedule"] = df_merged[SCHEDULE_COL].fillna("").astype(str).str.strip()
@@ -307,6 +325,7 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
                 "Province": row["Province"],
                 "BEIS School ID": row["BEIS School ID"],
                 "Schedule": row["Schedule_display"],
+                "Calendar Status": row.get("Calendar Status", ""),
                 "Start Time": row["Start Time"],
                 "End Time": row["End Time"],
                 "Installation Status": row["Installation Status"],
@@ -564,6 +583,21 @@ TEMPLATE = """
             background: linear-gradient(135deg, #fde68a, #facc15);
             color: #1f2933;
         }
+        .calendar-pill {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .calendar-sent {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #ffffff;
+        }
+        .calendar-not-sent {
+            background: linear-gradient(135deg, #f97373, #dc2626);
+            color: #ffffff;
+        }
 
         /* Responsive tweaks for smaller viewports */
         @media (max-width: 900px) {
@@ -628,6 +662,7 @@ TEMPLATE = """
                             <th>Province</th>
                             <th>BEIS ID</th>
                             <th title="Schedule of Delivery/Installation">Schedule</th>
+                            <th title="Status of Calendar">Calendar</th>
                             <th title="Start Time">Start</th>
                             <th title="End Time">End</th>
                             <th title="Outcome Status (to be Accomplished by Supplier)">Installation</th>
@@ -651,6 +686,17 @@ TEMPLATE = """
                             <td>{{ row["Province"] }}</td>
                             <td class="school-cell">{{ row["BEIS School ID"] }}</td>
                             <td>{{ row["Schedule"] }}</td>
+                            <td>
+                                {% set cal = row["Calendar Status"] or "" %}
+                                <span class="calendar-pill
+                                    {% if cal == 'Sent' %}
+                                        calendar-sent
+                                    {% elif cal %}
+                                        calendar-not-sent
+                                    {% endif %}">
+                                    {{ cal or '—' }}
+                                </span>
+                            </td>
                             <td>{{ row["Start Time"] }}</td>
                             <td>{{ row["End Time"] }}</td>
                             <td>{{ row["Installation Status"] }}</td>
@@ -676,7 +722,7 @@ TEMPLATE = """
                         {% endfor %}
                         {% if rows|length == 0 %}
                         <tr>
-                            <td colspan="9">No data available (check sheet names/columns or schedule values).</td>
+                            <td colspan="11">No data available (check sheet names/columns or schedule values).</td>
                         </tr>
                         {% endif %}
                     </tbody>
