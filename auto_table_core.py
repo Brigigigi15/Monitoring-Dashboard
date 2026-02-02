@@ -155,13 +155,38 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
     # Installation Status derived from Outcome Status (for now, just mirror it)
     df_merged["Installation Status"] = df_merged[OUTCOME_COL]
 
-    # Expose cleaned schedule as a simple field
-    df_merged["Schedule"] = df_merged[SCHEDULE_COL]
+    # Expose cleaned schedule as a simple field (string)
+    df_merged["Schedule"] = df_merged[SCHEDULE_COL].fillna("").astype(str).str.strip()
 
-    # For sorting, parse schedule as a date where possible
-    df_merged["Schedule_sort"] = pd.to_datetime(
-        df_merged["Schedule"], errors="coerce", dayfirst=False
-    )
+    # For sorting, parse schedule as a date where possible with several formats
+    def _parse_schedule(val: str):
+        val = (val or "").strip()
+        if not val:
+            return pd.NaT
+        # Explicit formats we expect to see
+        fmts = [
+            "%b %d, %Y",      # Feb 05, 2026
+            "%b. %d, %Y",     # Feb. 05, 2026
+            "%B %d, %Y",      # February 17, 2026
+            "%d-%b-%y",       # 05-Feb-26
+            "%d-%b-%Y",       # 05-Feb-2026
+            "%m/%d/%y",       # 02/04/26 (MM/DD/YY)
+            "%m/%d/%Y",       # 02/04/2026
+            "%d/%m/%y",       # 04/02/26 (DD/MM/YY)
+            "%d/%m/%Y",       # 04/02/2026
+        ]
+        for fmt in fmts:
+            try:
+                return datetime.strptime(val, fmt)
+            except Exception:
+                continue
+        # Fallback to pandas parser
+        try:
+            return pd.to_datetime(val, errors="raise")
+        except Exception:
+            return pd.NaT
+
+    df_merged["Schedule_sort"] = df_merged["Schedule"].apply(_parse_schedule)
     # Parse times for better ordering within a day
     df_merged["Start_sort"] = pd.to_datetime(
         df_merged["Start Time"], errors="coerce", format="%I:%M %p"
