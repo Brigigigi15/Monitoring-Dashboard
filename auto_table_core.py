@@ -253,10 +253,18 @@ def get_table_data(selected_region: str | None = None, selected_schedule: str | 
             .str.strip()
             .str.lower()
         )
+        # Starlink: only "activated" vs everything else
         star_activated = (star_series == "activated").sum()
         star_not_activated = len(df_sorted) - star_activated
-        approval_accepted = (appr_series == "accepted").sum()
-        approval_decline = (appr_series == "decline").sum()
+
+        # Approval:
+        # treat any value containing "accept" as accepted,
+        # any value containing "declin" (decline/declined) as decline,
+        # the rest (including blank/pending/others) as pending/blank.
+        accepted_mask = appr_series.str.contains("accept", na=False)
+        decline_mask = appr_series.str.contains("declin", na=False)
+        approval_accepted = accepted_mask.sum()
+        approval_decline = decline_mask.sum()
         approval_pending = len(df_sorted) - approval_accepted - approval_decline
         stats = {
             "active": bool(selected_schedule),
