@@ -1,3 +1,5 @@
 .vercel
 monitoring-dashboard-485505-73f943f6722d.json
 *.json
+__pycache__/ 
+*.pyc 

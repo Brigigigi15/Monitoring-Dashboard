@@ -146,7 +146,7 @@ def get_table_data(
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
-        return [], [], [], {
+        return [], [], [], [], {
             "active": False,
             "star_activated": 0,
             "star_not_activated": 0,
@@ -155,6 +155,7 @@ def get_table_data(
             "approval_decline": 0,
             "calendar_sent": 0,
             "calendar_not_sent": 0,
+            "s1_success": 0,
         }
 
     df_star = load_starlink_df()
@@ -289,6 +290,7 @@ def get_table_data(
             "approval_decline": 0,
             "calendar_sent": 0,
             "calendar_not_sent": 0,
+            "s1_success": 0,
         }
     else:
         star_series = (
@@ -303,6 +305,13 @@ def get_table_data(
         )
         cal_series = (
             df_sorted.get("Calendar Status", "")
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .str.lower()
+        )
+        inst_series = (
+            df_sorted["Installation Status"]
             .fillna("")
             .astype(str)
             .str.strip()
@@ -330,11 +339,14 @@ def get_table_data(
                 mask = cal_series == "sent"
             elif tile == "calendar_not_sent":
                 mask = cal_series == "invite not sent"
+            elif tile == "s1_success":
+                mask = inst_series == "s1 - installed (success)"
             df_sorted = df_sorted[mask]
             # Recompute series for stats on the filtered set
             star_series = star_series[mask]
             appr_series = appr_series[mask]
             cal_series = cal_series[mask]
+            inst_series = inst_series[mask]
 
         if df_sorted.empty:
             stats = {
@@ -346,6 +358,7 @@ def get_table_data(
                 "approval_decline": 0,
                 "calendar_sent": 0,
                 "calendar_not_sent": 0,
+                "s1_success": 0,
             }
         else:
             # Starlink: only "activated" vs everything else
@@ -365,6 +378,15 @@ def get_table_data(
             # Calendar status: Sent vs Invite Not Sent
             calendar_sent = (cal_series == "sent").sum()
             calendar_not_sent = (cal_series == "invite not sent").sum()
+            # S1 success count based on Installation Status
+            inst_series = (
+                df_sorted["Installation Status"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                .str.lower()
+            )
+            s1_success = (inst_series == "s1 - installed (success)").sum()
 
             stats = {
                 "active": True,  # show stats for overall or filtered
@@ -375,6 +397,7 @@ def get_table_data(
                 "approval_decline": int(approval_decline),
                 "calendar_sent": int(calendar_sent),
                 "calendar_not_sent": int(calendar_not_sent),
+                "s1_success": int(s1_success),
             }
 
     rows = []
@@ -421,7 +444,7 @@ TEMPLATE = """
 <head>
     <meta charset="utf-8">
     <title>LEOxSOLAR Schedule Monitoring</title>
-    <meta http-equiv="refresh" content="60">
+    <meta http-equiv="refresh" content="300">
     <style>
         html, body {
             height: 100%;
@@ -493,6 +516,97 @@ TEMPLATE = """
         .filter-bar select:hover {
             border-color: #0ea5e9;
         }
+        .report-bar {
+            margin: 4px 0 8px 0;
+            font-size: 11px;
+            display: flex;
+            justify-content: flex-start;
+        }
+        .report-trigger-btn {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+        }
+        .report-trigger-btn:hover {
+            background: linear-gradient(135deg, #16a34a, #15803d);
+        }
+        .report-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .report-modal {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.45);
+            padding: 10px 12px;
+            max-width: 520px;
+            width: 100%;
+            font-size: 11px;
+        }
+        .report-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .report-modal-title {
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .report-modal-close {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        .report-modal-body {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+            margin-bottom: 8px;
+        }
+        .report-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+        .report-modal label {
+            font-size: 10px;
+            color: #4b5563;
+        }
+        .report-modal button.primary {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+        }
+        .report-modal button.secondary {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            background: #e5e7eb;
+            color: #111827;
+            cursor: pointer;
+        }
         .card {
             background: linear-gradient(135deg, #f9fafb 0%, #e2e8f0 40%, #cbd5f5 100%);
             border-radius: 10px;
@@ -544,10 +658,12 @@ TEMPLATE = """
             background-color: #e5f0ff;
         }
         .row-warning td {
-            background-color: #fff7d6;
+            background-color: #fef9c3;  /* soft yellow */
+            color: #1f2933;
         }
         .row-critical td {
-            background-color: #ffe4e6;
+            background-color: #fee2e2;  /* soft red */
+            color: #b91c1c;
         }
         .region-cell {
             text-align: left;
@@ -625,18 +741,20 @@ TEMPLATE = """
         }
         .stats-grid {
             flex: 0 0 auto;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 4px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(120px, 1fr)); /* two balanced columns */
+            column-gap: 24px;          /* extra clear space between columns */
+            row-gap: 8px;              /* comfortable vertical spacing */
+            max-width: 340px;          /* slightly wider to keep tiles readable */
+            margin: 0 auto;            /* center grid inside stats card */
         }
         .stats-item {
-            flex: 0 0 calc(33.333% - 6px); /* three columns on wide screens */
+            width: 100%;              /* take full cell width */
             border-radius: 6px;
             background: #e0e7ff;
             border: 1px solid rgba(79, 70, 229, 0.8);
             box-shadow: 0 2px 8px rgba(15, 23, 42, 0.16);
-            padding: 3px 4px;
+            padding: 4px 8px;         /* a bit more breathing room */
             text-align: center;
         }
         .stats-tile-link {
@@ -647,11 +765,13 @@ TEMPLATE = """
         .stats-label {
             color: #4b5563;
             font-size: 9px;
+            line-height: 1.15;
             text-align: center;
         }
         .stats-value {
             font-weight: 700;
             font-size: 11px;
+            line-height: 1.15;
             color: #0f172a;
             text-align: center;
         }
@@ -692,13 +812,29 @@ TEMPLATE = """
         .stats-grid .stats-item:nth-child(7) .stats-value {
             color: #ffffff;
         }
+        .stats-grid .stats-item.stats-ok {
+            background: linear-gradient(135deg, #22c55e, #16a34a);  /* green */
+            color: #ffffff;
+        }
+        .stats-grid .stats-item.stats-warn {
+            background: linear-gradient(135deg, #fde68a, #facc15);  /* yellow */
+            color: #1f2933;
+        }
+        .stats-grid .stats-item.stats-bad {
+            background: linear-gradient(135deg, #f97373, #dc2626);  /* red */
+            color: #ffffff;
+        }
+        .stats-grid .stats-item.stats-full {
+            grid-column: 1 / -1; /* span full row */
+        }
         .stats-charts {
             flex: 0 0 auto;
             display: flex;
             flex-direction: column;  /* stack charts vertically */
-            gap: 4px;
+            gap: 6px;
             align-items: center;
             justify-content: center;
+            margin-top: 16px;        /* extra space between tiles and charts */
         }
         .stats-chart {
             flex: 0 0 auto;
@@ -706,6 +842,14 @@ TEMPLATE = """
             flex-direction: column;
             align-items: center;
             justify-content: center;
+        }
+        .stats-chart .stats-label {
+            font-weight: 700;
+            font-size: 10px;
+            margin-bottom: 4px;   /* space before chart canvas */
+        }
+        .stats-chart canvas {
+            margin-top: 2px;      /* extra breathing room under label */
         }
         .status-pill {
             display: inline-block;
@@ -717,15 +861,15 @@ TEMPLATE = """
             box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
         }
         .status-ok {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
+            background: linear-gradient(135deg, #22c55e, #16a34a);  /* green */
             color: #ffffff;
         }
         .status-bad {
-            background: linear-gradient(135deg, #f97373, #dc2626);
+            background: linear-gradient(135deg, #f97373, #dc2626);  /* red */
             color: #ffffff;
         }
         .status-warn {
-            background: linear-gradient(135deg, #fde68a, #facc15);
+            background: linear-gradient(135deg, #fde68a, #facc15);  /* yellow */
             color: #1f2933;
         }
         .calendar-pill {
@@ -736,12 +880,103 @@ TEMPLATE = """
             font-weight: 600;
         }
         .calendar-sent {
-            background: linear-gradient(135deg, #22c55e, #16a34a);
+            background: linear-gradient(135deg, #22c55e, #16a34a);  /* green */
             color: #ffffff;
         }
         .calendar-not-sent {
-            background: linear-gradient(135deg, #f97373, #dc2626);
+            background: linear-gradient(135deg, #f97373, #dc2626);  /* red */
             color: #ffffff;
+        }
+        .report-bar {
+            margin: 4px 0 8px 0;
+            font-size: 11px;
+            display: flex;
+            justify-content: flex-start;
+        }
+        .report-trigger-btn {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+        }
+        .report-trigger-btn:hover {
+            background: linear-gradient(135deg, #16a34a, #15803d);
+        }
+        .report-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .report-modal {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(15, 23, 42, 0.45);
+            padding: 10px 12px;
+            max-width: 520px;
+            width: 100%;
+            font-size: 11px;
+        }
+        .report-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .report-modal-title {
+            font-weight: 700;
+            color: #0f172a;
+        }
+        .report-modal-close {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        .report-modal-body {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 12px;
+            margin-bottom: 8px;
+        }
+        .report-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+        .report-modal label {
+            font-size: 10px;
+            color: #4b5563;
+        }
+        .report-modal button.primary {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);
+        }
+        .report-modal button.secondary {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 500;
+            background: #e5e7eb;
+            color: #111827;
+            cursor: pointer;
         }
 
         /* Responsive tweaks for smaller viewports */
@@ -773,10 +1008,49 @@ TEMPLATE = """
     </style>
 </head>
 <body>
+    {% if show_report %}
+    <div class="report-modal-backdrop" id="report-modal-backdrop">
+        <div class="report-modal">
+            <div class="report-modal-header">
+                <div class="report-modal-title">Generate Report</div>
+                <button type="button" class="report-modal-close" id="close-report-modal">&times;</button>
+            </div>
+            <form method="get" action="" class="report-modal-form">
+                <input type="hidden" name="region" value="{{ selected_region }}">
+                <input type="hidden" name="schedule" value="{{ selected_schedule }}">
+                <input type="hidden" name="installation" value="{{ selected_installation }}">
+                <input type="hidden" name="tile" value="{{ selected_tile }}">
+                <input type="hidden" name="download" value="xlsx">
+                <div class="report-modal-body">
+                    <span>Include columns:</span>
+                    <label><input type="checkbox" name="col" value="Region" checked> Region</label>
+                    <label><input type="checkbox" name="col" value="Province" checked> Province</label>
+                    <label><input type="checkbox" name="col" value="BEIS School ID" checked> BEIS ID</label>
+                    <label><input type="checkbox" name="col" value="Schedule" checked> Schedule</label>
+                    <label><input type="checkbox" name="col" value="Calendar Status" checked> Calendar</label>
+                    <label><input type="checkbox" name="col" value="Start Time" checked> Start</label>
+                    <label><input type="checkbox" name="col" value="End Time" checked> End</label>
+                    <label><input type="checkbox" name="col" value="Installation Status" checked> Installation</label>
+                    <label><input type="checkbox" name="col" value="Starlink Status" checked> Starlink</label>
+                    <label><input type="checkbox" name="col" value="Approval" checked> Approval</label>
+                    <label><input type="checkbox" name="col" value="Blocker" checked> Blocker</label>
+                    <label>
+                        <input type="checkbox" name="include_stats" value="1" checked>
+                        Include summary & charts
+                    </label>
+                </div>
+                <div class="report-modal-footer">
+                    <button type="button" class="secondary" id="cancel-report-modal">Cancel</button>
+                    <button type="submit" class="primary">Download Report</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
     <div class="page">
         <h1>LEOxSOLAR Schedule Monitoring</h1>
         <div class="meta-line">
-            Auto-refresh: 60s | Last update: {{ last_updated }}
+            Auto-refresh: 5 minutes | Last update: {{ last_updated }}
         </div>
         <div class="meta-line">
             Showing {{ rows|length }} records
@@ -784,9 +1058,9 @@ TEMPLATE = """
             • Schedule: {{ selected_schedule or 'All' }}
         </div>
 
-        <form method="get" class="filter-bar">
-            <label for="region-select">Region:</label>
-            <select id="region-select" name="region" onchange="this.form.submit()">
+          <form method="get" class="filter-bar">
+              <label for="region-select">Region:</label>
+              <select id="region-select" name="region" onchange="this.form.submit()">
                 <option value="">All Regions</option>
                 {% for r in region_options %}
                 <option value="{{ r }}" {% if selected_region == r %}selected{% endif %}>{{ r }}</option>
@@ -800,13 +1074,20 @@ TEMPLATE = """
                 {% endfor %}
             </select>
             <label for="installation-select">Installation:</label>
-            <select id="installation-select" name="installation" onchange="this.form.submit()">
-                <option value="">All Installation Statuses</option>
-                {% for inst in installation_options %}
-                <option value="{{ inst }}" {% if selected_installation == inst %}selected{% endif %}>{{ inst }}</option>
-                {% endfor %}
-            </select>
-        </form>
+              <select id="installation-select" name="installation" onchange="this.form.submit()">
+                  <option value="">All Installation Statuses</option>
+                  {% for inst in installation_options %}
+                  <option value="{{ inst }}" {% if selected_installation == inst %}selected{% endif %}>{{ inst }}</option>
+                  {% endfor %}
+              </select>
+          </form>
+          {% if show_report %}
+          <div class="report-bar">
+              <button type="button" class="report-trigger-btn" id="open-report-modal">
+                  Generate Report
+              </button>
+          </div>
+          {% endif %}
 
         <div class="card">
             <div class="table-wrapper">
@@ -899,60 +1180,85 @@ TEMPLATE = """
                     </a>
                 </div>
                 {% endif %}
-                <div class="stats-main">
-                    <div class="stats-grid">
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=star_activated" class="stats-tile-link">
-                                <div class="stats-label">✔ Starlink Activated</div>
-                                <div class="stats-value">{{ stats.star_activated }}</div>
-                            </a>
-                        </div>
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=star_not_activated" class="stats-tile-link">
-                                <div class="stats-label">⚠ Starlink Not Activated</div>
-                                <div class="stats-value">{{ stats.star_not_activated }}</div>
-                            </a>
-                        </div>
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=approval_accepted" class="stats-tile-link">
-                                <div class="stats-label">✔ Approval Accepted</div>
-                                <div class="stats-value">{{ stats.approval_accepted }}</div>
-                            </a>
-                        </div>
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=approval_pending" class="stats-tile-link">
-                                <div class="stats-label">⚠ Approval Pending / Blank</div>
-                                <div class="stats-value">{{ stats.approval_pending }}</div>
-                            </a>
-                        </div>
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=approval_decline" class="stats-tile-link">
-                                <div class="stats-label">✖ Approval Decline / Other</div>
-                                <div class="stats-value">{{ stats.approval_decline }}</div>
-                            </a>
-                        </div>
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=calendar_sent" class="stats-tile-link">
-                                <div class="stats-label">✔ Calendar Sent</div>
-                                <div class="stats-value">{{ stats.calendar_sent }}</div>
-                            </a>
-                        </div>
-                        <div class="stats-item">
-                            <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}&tile=calendar_not_sent" class="stats-tile-link">
-                                <div class="stats-label">✖ Calendar Invite Not Sent</div>
-                                <div class="stats-value">{{ stats.calendar_not_sent }}</div>
-                            </a>
-                        </div>
-                    </div>
-                    <div class="stats-charts">
-                        <div class="stats-chart">
-                            <div class="stats-label">Starlink Status</div>
-                            <canvas id="starChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
-                        </div>
-                        <div class="stats-chart">
-                            <div class="stats-label">Approval Status</div>
-                            <canvas id="approvalChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
-                        </div>
+                    <div class="stats-main">
+                          <div class="stats-grid">
+                              <!-- Row 1: Starlink -->
+                              <div class="stats-item stats-ok">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=star_activated" class="stats-tile-link">
+                                      <div class="stats-label">✔ Starlink Activated</div>
+                                      <div class="stats-value">{{ stats.star_activated }}</div>
+                                  </a>
+                              </div>
+                              <div class="stats-item stats-bad">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=star_not_activated" class="stats-tile-link">
+                                      <div class="stats-label">⚠ Starlink Not Activated</div>
+                                      <div class="stats-value">{{ stats.star_not_activated }}</div>
+                                  </a>
+                              </div>
+                    
+                              <!-- Row 2: Approval -->
+                              <div class="stats-item stats-ok">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=approval_accepted" class="stats-tile-link">
+                                      <div class="stats-label">✔ Approval Accepted</div>
+                                      <div class="stats-value">{{ stats.approval_accepted }}</div>
+                                  </a>
+                              </div>
+                              <div class="stats-item stats-warn">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=approval_pending" class="stats-tile-link">
+                                      <div class="stats-label">⚠ Approval Pending / Blank</div>
+                                      <div class="stats-value">{{ stats.approval_pending }}</div>
+                                  </a>
+                              </div>
+                    
+                              <!-- Row 3: Calendar -->
+                              <div class="stats-item stats-ok">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=calendar_sent" class="stats-tile-link">
+                                      <div class="stats-label">✔ Calendar Sent</div>
+                                      <div class="stats-value">{{ stats.calendar_sent }}</div>
+                                  </a>
+                              </div>
+                              <div class="stats-item stats-bad">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=calendar_not_sent" class="stats-tile-link">
+                                      <div class="stats-label">✖ Calendar Invite Not Sent</div>
+                                      <div class="stats-value">{{ stats.calendar_not_sent }}</div>
+                                  </a>
+                              </div>
+                    
+                              <!-- Row 4: S1 Installed (Success) -->
+                              <div class="stats-item stats-ok">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=s1_success" class="stats-tile-link">
+                                      <div class="stats-label">✔ S1 - Installed (Success)</div>
+                                      <div class="stats-value">{{ stats.s1_success }}</div>
+                                  </a>
+                              </div>
+                    
+                              <!-- Row 5: Approval Decline / Other -->
+                              <div class="stats-item stats-bad">
+                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
+                      &installation={{ selected_installation }}&tile=approval_decline" class="stats-tile-link">
+                                      <div class="stats-label">✖ Approval Decline / Other</div>
+                                      <div class="stats-value">{{ stats.approval_decline }}</div>
+                                  </a>
+                              </div>
+                          </div>
+                          <div class="stats-charts">
+                              <div class="stats-chart">
+                                  <div class="stats-label">Starlink Status</div>
+                                  <canvas id="starChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
+                              </div>
+                              <div class="stats-chart">
+                                  <div class="stats-label">Approval Status</div>
+                                  <canvas id="approvalChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
+                              </div>
+                          </div>
+                      </div>
                     </div>
                 </div>
             </div>
@@ -961,11 +1267,11 @@ TEMPLATE = """
     </div>
 </body>
 </html>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-(function () {
-    const active = {{ 'true' if stats.active else 'false' }};
-    if (!active) return;
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+  (function () {
+      const active = {{ 'true' if stats.active else 'false' }};
+      if (!active) return;
 
     // Starlink pie (Activated vs Not Activated)
     const starEl = document.getElementById('starChart');
@@ -978,10 +1284,10 @@ TEMPLATE = """
                 labels: ['Activated', 'Not Activated'],
                 datasets: [{
                     data: starData,
-                    backgroundColor: [
-                        'rgba(22, 163, 74, 0.85)',  // green
-                        'rgba(220, 38, 38, 0.85)',  // red
-                    ],
+                      backgroundColor: [
+                          'rgba(34, 197, 94, 0.85)',  // green
+                          'rgba(239, 68, 68, 0.85)',  // red
+                      ],
                     borderWidth: 0,
                 }]
             },
@@ -1012,11 +1318,11 @@ TEMPLATE = """
                 labels: ['Accepted', 'Pending/Blank', 'Decline/Other'],
                 datasets: [{
                     data: apprData,
-                    backgroundColor: [
-                        'rgba(34, 197, 94, 0.85)',   // green
-                        'rgba(250, 204, 21, 0.9)',   // yellow
-                        'rgba(220, 38, 38, 0.85)',   // red
-                    ],
+                      backgroundColor: [
+                          'rgba(34, 197, 94, 0.85)',   // green
+                          'rgba(250, 204, 21, 0.90)',  // yellow
+                          'rgba(239, 68, 68, 0.85)',   // red
+                      ],
                     borderWidth: 0,
                 }]
             },
@@ -1029,8 +1335,33 @@ TEMPLATE = """
                     }
                 }
             }
-        });
-    }
-})();
-</script>
-"""
+          });
+      }
+  })();
+
+  (function () {
+      const backdrop = document.getElementById('report-modal-backdrop');
+      const openBtn = document.getElementById('open-report-modal');
+      const closeBtn = document.getElementById('close-report-modal');
+      const cancelBtn = document.getElementById('cancel-report-modal');
+
+      if (!backdrop || !openBtn || !closeBtn || !cancelBtn) return;
+
+      function openModal() {
+          backdrop.style.display = 'flex';
+      }
+      function closeModal() {
+          backdrop.style.display = 'none';
+      }
+
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      backdrop.addEventListener('click', function (e) {
+          if (e.target === backdrop) {
+              closeModal();
+          }
+      });
+  })();
+  </script>
+  """

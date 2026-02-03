@@ -1,7 +1,10 @@
-from flask import Flask, render_template_string, request
+from io import BytesIO
 from datetime import datetime
 
+from flask import Flask, render_template_string, request, send_file
+
 from auto_table_core import TEMPLATE, get_table_data
+from api.index import _build_workbook
 
 app = Flask(__name__)
 
@@ -12,9 +15,34 @@ def index():
     selected_schedule = request.args.get("schedule", "").strip() or None
     selected_installation = request.args.get("installation", "").strip() or None
     selected_tile = request.args.get("tile", "").strip() or None
+
     rows, region_options, schedule_options, installation_options, stats = get_table_data(
         selected_region, selected_schedule, selected_installation, selected_tile
     )
+
+    # Handle XLSX download when the report form is submitted
+    if request.args.get("download") == "xlsx":
+        selected_columns = request.args.getlist("col")
+        include_stats = request.args.get("include_stats", "1") == "1"
+        filters = {
+            "region": selected_region,
+            "schedule": selected_schedule,
+            "installation": selected_installation,
+            "tile": selected_tile,
+        }
+        wb = _build_workbook(rows, stats, selected_columns, include_stats, filters)
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(
+            buf,
+            as_attachment=True,
+            download_name="monitoring-report.xlsx",
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    show_report = request.args.get("report", "") == "1"
+
     return render_template_string(
         TEMPLATE,
         rows=rows,
@@ -25,6 +53,7 @@ def index():
         installation_options=installation_options,
         selected_installation=selected_installation or "",
         selected_tile=selected_tile or "",
+        show_report=show_report,
         stats=stats,
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
