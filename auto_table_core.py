@@ -142,6 +142,7 @@ def get_table_data(
     selected_schedule: str | None = None,
     selected_installation: str | None = None,
     selected_tile: str | None = None,
+    selected_lot: str | None = None,
 ):
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
@@ -246,6 +247,37 @@ def get_table_data(
         by=["Schedule_sort", "Start_sort", "End_sort", "Region", "Province", "BEIS School ID"],
         kind="stable",
     )
+
+    # Optional Lot # filter (maps lot to a set of regions)
+    lot_map = {
+        "Lot #1": {
+            "Region I",
+            "Region II",
+            "Region III",
+            "Region IV-A",
+            "Region IV-B",
+            "MIMAROPA",
+            "Region V",
+            "CAR",
+        },
+        "Lot #2": {
+            "Region VI",
+            "Region VII",
+            "Region VIII",
+            "NIR",
+        },
+        "Lot #3": {
+            "Region IX",
+            "Region X",
+            "Region XI",
+            "Region XII",
+            "Region CARAGA",
+        },
+    }
+    lot = (selected_lot or "").strip()
+    if lot in lot_map:
+        allowed_regions = lot_map[lot]
+        df_sorted = df_sorted[df_sorted["Region"].isin(allowed_regions)]
 
     # All distinct regions for filter options
     region_options = sorted(
@@ -1020,6 +1052,7 @@ TEMPLATE = """
                 <input type="hidden" name="schedule" value="{{ selected_schedule }}">
                 <input type="hidden" name="installation" value="{{ selected_installation }}">
                 <input type="hidden" name="tile" value="{{ selected_tile }}">
+                <input type="hidden" name="lot" value="{{ selected_lot }}">
                 <input type="hidden" name="download" value="xlsx">
                 <div class="report-modal-body">
                     <span>Include columns:</span>
@@ -1059,6 +1092,13 @@ TEMPLATE = """
         </div>
 
           <form method="get" class="filter-bar">
+              <label for="lot-select">Lot #:</label>
+              <select id="lot-select" name="lot" onchange="this.form.submit()">
+                  <option value="">All Lots</option>
+                  <option value="Lot #1" {% if selected_lot == 'Lot #1' %}selected{% endif %}>Lot #1</option>
+                  <option value="Lot #2" {% if selected_lot == 'Lot #2' %}selected{% endif %}>Lot #2</option>
+                  <option value="Lot #3" {% if selected_lot == 'Lot #3' %}selected{% endif %}>Lot #3</option>
+              </select>
               <label for="region-select">Region:</label>
               <select id="region-select" name="region" onchange="this.form.submit()">
                 <option value="">All Regions</option>

@@ -15,9 +15,10 @@ def index():
     selected_schedule = request.args.get("schedule", "").strip() or None
     selected_installation = request.args.get("installation", "").strip() or None
     selected_tile = request.args.get("tile", "").strip() or None
+    selected_lot = request.args.get("lot", "").strip() or None
 
     rows, region_options, schedule_options, installation_options, stats = get_table_data(
-        selected_region, selected_schedule, selected_installation, selected_tile
+        selected_region, selected_schedule, selected_installation, selected_tile, selected_lot
     )
 
     # Handle XLSX download when the report form is submitted
@@ -29,15 +30,21 @@ def index():
             "schedule": selected_schedule,
             "installation": selected_installation,
             "tile": selected_tile,
+            "lot": selected_lot,
         }
         wb = _build_workbook(rows, stats, selected_columns, include_stats, filters)
         buf = BytesIO()
         wb.save(buf)
         buf.seek(0)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M")
+        lot_tag = ""
+        if selected_lot:
+            lot_tag = "-" + selected_lot.lower().replace(" ", "").replace("#", "")
+        filename = f"monitoring-report{lot_tag}-{stamp}.xlsx"
         return send_file(
             buf,
             as_attachment=True,
-            download_name="monitoring-report.xlsx",
+            download_name=filename,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
@@ -54,6 +61,7 @@ def index():
         selected_installation=selected_installation or "",
         selected_tile=selected_tile or "",
         show_report=show_report,
+        selected_lot=selected_lot or "",
         stats=stats,
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
