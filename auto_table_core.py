@@ -126,8 +126,8 @@ def load_main_df() -> pd.DataFrame:
     else:
         df["Division"] = ""
 
-    # Optional columns that we show if present (e.g., Division)
-    optional = ["Division"]
+    # Optional columns that we show if present (e.g., Division, Final Status, Validated?)
+    optional = ["Division", "Final Status", "Validated?"]
     cols = required + [c for c in optional if c in df.columns]
     df = df[cols].copy()
 
@@ -155,13 +155,15 @@ def get_table_data(
     selected_installation: str | None = None,
     selected_tile: str | None = None,
     selected_lot: str | None = None,
+    selected_final: str | None = None,
+    selected_validated: str | None = None,
     include_unscheduled: bool = False,
     selected_search: str | None = None,
 ):
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
-        return [], [], [], [], {
+        return [], [], [], [], [], [], {
             "active": False,
             "star_activated": 0,
             "star_not_activated": 0,
@@ -324,13 +326,57 @@ def get_table_data(
     )
     installation_options = sorted(inst_unique.tolist())
 
+    # All distinct Final Status values for filter options
+    if "Final Status" in df_sorted.columns:
+        final_unique = (
+            df_sorted["Final Status"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+        )
+        final_status_options = sorted(final_unique.tolist())
+    else:
+        final_status_options = []
+
+    # All distinct Validated? values for filter options
+    if "Validated?" in df_sorted.columns:
+        val_unique = (
+            df_sorted["Validated?"]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+        )
+        validated_options = sorted(val_unique.tolist())
+    else:
+        validated_options = []
+
     # Optional filters
     if selected_region:
         df_sorted = df_sorted[df_sorted["Region"] == selected_region]
     if selected_schedule:
         df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
     if selected_installation:
-        df_sorted = df_sorted[df_sorted["Installation Status"] == selected_installation]
+        # Special value for blank Installation Status
+        if selected_installation == "__blank__":
+            df_sorted = df_sorted[
+                df_sorted["Installation Status"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+                == ""
+            ]
+        else:
+            df_sorted = df_sorted[df_sorted["Installation Status"] == selected_installation]
+    if selected_final and "Final Status" in df_sorted.columns:
+        df_sorted = df_sorted[df_sorted["Final Status"] == selected_final]
+    if selected_validated and "Validated?" in df_sorted.columns:
+        df_sorted = df_sorted[df_sorted["Validated?"] == selected_validated]
     # Free-text search across key columns
     if selected_search:
         needle = selected_search.strip()
@@ -343,16 +389,14 @@ def get_table_data(
                 "Installation Status",
                 "Starlink Status",
                 "Approval (Accepted / Decline) ",
+                "Final Status",
+                "Validated?",
                 BLOCKER_COL,
             ]
             masks = []
             for col in cols_to_search:
                 if col in df_sorted.columns:
-                    series = (
-                        df_sorted[col]
-                        .fillna("")
-                        .astype(str)
-                    )
+                    series = df_sorted[col].fillna("").astype(str)
                     masks.append(series.str.contains(needle, case=False, na=False))
             if masks:
                 combined = masks[0]
@@ -540,11 +584,21 @@ def get_table_data(
                 "Installation Status": row["Installation Status"],
                 "Starlink Status": star,
                 "Approval": approval_raw,
+                "Final Status": row.get("Final Status", ""),
+                "Validated?": row.get("Validated?", ""),
                 "Blocker": row[BLOCKER_COL],
             }
         )
 
-    return rows, region_options, schedule_options, installation_options, stats
+    return (
+        rows,
+        region_options,
+        schedule_options,
+        installation_options,
+        final_status_options,
+        validated_options,
+        stats,
+    )
 
 
 TEMPLATE = """
@@ -807,13 +861,11 @@ TEMPLATE = """
             color: #b91c1c;
         }
         .region-cell {
-            text-align: left;
+            text-align: center;
             font-weight: 600;
-            padding-left: 6px;
         }
         .school-cell {
-            text-align: left;
-            padding-left: 6px;
+            text-align: center;
             white-space: normal;
             word-wrap: break-word;
         }
@@ -1218,6 +1270,9 @@ TEMPLATE = """
           </div>
           <div class="filter-container" id="filters-container" style="display: none;">
               <form method="get" class="filter-bar">
+                    {% if include_unscheduled %}
+                    <input type="hidden" name="full" value="1">
+                    {% endif %}
                     <label for="lot-select">Lot #:</label>
                     <select id="lot-select" name="lot">
                       <option value="">All Lots</option>
@@ -1242,8 +1297,23 @@ TEMPLATE = """
                   <label for="installation-select">Installation:</label>
                     <select id="installation-select" name="installation">
                       <option value="">All Installation Statuses</option>
+                      <option value="__blank__" {% if selected_installation == '__blank__' %}selected{% endif %}>No Installation Status</option>
                       {% for inst in installation_options %}
                       <option value="{{ inst }}" {% if selected_installation == inst %}selected{% endif %}>{{ inst }}</option>
+                      {% endfor %}
+                  </select>
+                  <label for="final-status-select">Final:</label>
+                  <select id="final-status-select" name="final">
+                      <option value="">All</option>
+                      {% for fs in final_status_options %}
+                      <option value="{{ fs }}" {% if selected_final == fs %}selected{% endif %}>{{ fs }}</option>
+                      {% endfor %}
+                  </select>
+                  <label for="validated-select">Validated:</label>
+                  <select id="validated-select" name="validated">
+                      <option value="">All</option>
+                      {% for v in validated_options %}
+                      <option value="{{ v }}" {% if selected_validated == v %}selected{% endif %}>{{ v }}</option>
                       {% endfor %}
                   </select>
                   <input
@@ -1284,12 +1354,12 @@ TEMPLATE = """
                               <th>BEIS ID</th>
                             <th title="Schedule of Delivery/Installation">Schedule</th>
                             <th title="Status of Calendar">Calendar</th>
-                            <th title="Start Time">Start</th>
-                            <th title="End Time">End</th>
+                            <th title="Start–End">Time</th>
                             <th title="Outcome Status (to be Accomplished by Supplier)">Installation</th>
                             <th>Starlink</th>
                             <th title="Approval (Accepted / Decline)">Approval</th>
-                            <th title="Blocker (to be Accomplished by Supplier)">Blocker</th>
+                            <th>Final Status</th>
+                            <th>Validated?</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1316,11 +1386,16 @@ TEMPLATE = """
                                     {% elif cal %}
                                         calendar-not-sent
                                     {% endif %}">
-                                    {{ cal or '—' }}
+                                    {{ cal or '-' }}
                                 </span>
                             </td>
-                            <td>{{ row["Start Time"] }}</td>
-                            <td>{{ row["End Time"] }}</td>
+                            <td>
+                                {% if row["Start Time"] and row["End Time"] %}
+                                    {{ row["Start Time"] }} - {{ row["End Time"] }}
+                                {% else %}
+                                    {{ row["Start Time"] or row["End Time"] }}
+                                {% endif %}
+                            </td>
                             <td>{{ row["Installation Status"] }}</td>
                             <td>
                                 <span class="status-pill {% if star == 'activated' %}status-ok{% else %}status-bad{% endif %}">
@@ -1339,7 +1414,8 @@ TEMPLATE = """
                                     {{ row["Approval"] or 'Pending' }}
                                 </span>
                             </td>
-                            <td class="status-cell">{{ row["Blocker"] }}</td>
+                            <td>{{ row["Final Status"] }}</td>
+                            <td>{{ row["Validated?"] }}</td>
                         </tr>
                         {% endfor %}
                         {% if rows|length == 0 %}

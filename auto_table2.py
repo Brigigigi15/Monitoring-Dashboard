@@ -14,17 +14,29 @@ def index():
     selected_region = request.args.get("region", "").strip() or None
     selected_schedule = request.args.get("schedule", "").strip() or None
     selected_installation = request.args.get("installation", "").strip() or None
+    selected_final = request.args.get("final", "").strip() or None
+    selected_validated = request.args.get("validated", "").strip() or None
     selected_tile = request.args.get("tile", "").strip() or None
     selected_lot = request.args.get("lot", "").strip() or None
     selected_search = request.args.get("search", "").strip() or None
     include_unscheduled = request.args.get("full", "") == "1"
 
-    rows, region_options, schedule_options, installation_options, stats = get_table_data(
-        selected_region,
-        selected_schedule,
-        selected_installation,
-        selected_tile,
-        selected_lot,
+    (
+        rows,
+        region_options,
+        schedule_options,
+        installation_options,
+        final_status_options,
+        validated_options,
+        stats,
+    ) = get_table_data(
+        selected_region=selected_region,
+        selected_schedule=selected_schedule,
+        selected_installation=selected_installation,
+        selected_tile=selected_tile,
+        selected_lot=selected_lot,
+        selected_final=selected_final,
+        selected_validated=selected_validated,
         include_unscheduled=include_unscheduled,
         selected_search=selected_search,
     )
@@ -67,6 +79,10 @@ def index():
         selected_schedule=selected_schedule or "",
         installation_options=installation_options,
         selected_installation=selected_installation or "",
+        final_status_options=final_status_options,
+        selected_final=selected_final or "",
+        validated_options=validated_options,
+        selected_validated=selected_validated or "",
         selected_tile=selected_tile or "",
         show_report=show_report,
         selected_lot=selected_lot or "",
