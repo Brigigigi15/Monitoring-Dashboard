@@ -131,9 +131,9 @@ def load_main_df() -> pd.DataFrame:
     df["Status of Calendar"] = df["Status of Calendar"].fillna("").astype(str).str.strip()
     df[BLOCKER_COL] = df[BLOCKER_COL].fillna("").astype(str).str.strip()
 
-    # Only keep rows where schedule has a value
-    df = df[df[SCHEDULE_COL] != ""].copy()
-
+    # Do not drop rows with blank schedule here; keep full data set.
+    # The main view can choose to filter out unscheduled rows, while
+    # an alternate "full" mode can include everything.
     return df
 
 
@@ -143,6 +143,8 @@ def get_table_data(
     selected_installation: str | None = None,
     selected_tile: str | None = None,
     selected_lot: str | None = None,
+    include_unscheduled: bool = False,
+    selected_search: str | None = None,
 ):
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
@@ -157,6 +159,8 @@ def get_table_data(
             "calendar_sent": 0,
             "calendar_not_sent": 0,
             "s1_success": 0,
+            "scheduled": 0,
+            "unscheduled": 0,
         }
 
     df_star = load_starlink_df()
@@ -242,6 +246,11 @@ def get_table_data(
 
     df_merged["Schedule_display"] = df_merged.apply(_format_schedule, axis=1)
 
+    # In the default view we only consider rows with a schedule.
+    # In "full" mode we keep unscheduled rows as well.
+    if not include_unscheduled:
+        df_merged = df_merged[df_merged["Schedule"] != ""].copy()
+
     # Sort by earliest schedule date, then start/end time, then by region/province/school
     df_sorted = df_merged.sort_values(
         by=["Schedule_sort", "Start_sort", "End_sort", "Region", "Province", "BEIS School ID"],
@@ -310,6 +319,34 @@ def get_table_data(
         df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
     if selected_installation:
         df_sorted = df_sorted[df_sorted["Installation Status"] == selected_installation]
+    # Free-text search across key columns
+    if selected_search:
+        needle = selected_search.strip()
+        if needle:
+            cols_to_search = [
+                "Region",
+                "Province",
+                "BEIS School ID",
+                "Schedule_display",
+                "Installation Status",
+                "Starlink Status",
+                "Approval (Accepted / Decline) ",
+                BLOCKER_COL,
+            ]
+            masks = []
+            for col in cols_to_search:
+                if col in df_sorted.columns:
+                    series = (
+                        df_sorted[col]
+                        .fillna("")
+                        .astype(str)
+                    )
+                    masks.append(series.str.contains(needle, case=False, na=False))
+            if masks:
+                combined = masks[0]
+                for m in masks[1:]:
+                    combined |= m
+                df_sorted = df_sorted[combined]
 
     # Build stats based on the filtered set (for selected schedule/region)
     if df_sorted.empty:
@@ -323,6 +360,8 @@ def get_table_data(
             "calendar_sent": 0,
             "calendar_not_sent": 0,
             "s1_success": 0,
+            "scheduled": 0,
+            "unscheduled": 0,
         }
     else:
         star_series = (
@@ -373,6 +412,14 @@ def get_table_data(
                 mask = cal_series == "invite not sent"
             elif tile == "s1_success":
                 mask = inst_series == "s1 - installed (success)"
+            elif tile == "unscheduled":
+                sched_series_tmp = (
+                    df_sorted["Schedule"]
+                    .fillna("")
+                    .astype(str)
+                    .str.strip()
+                )
+                mask = sched_series_tmp == ""
             df_sorted = df_sorted[mask]
             # Recompute series for stats on the filtered set
             star_series = star_series[mask]
@@ -391,11 +438,15 @@ def get_table_data(
                 "calendar_sent": 0,
                 "calendar_not_sent": 0,
                 "s1_success": 0,
+                "scheduled": 0,
+                "unscheduled": 0,
             }
         else:
+            total_rows = len(df_sorted)
+
             # Starlink: only "activated" vs everything else
             star_activated = (star_series == "activated").sum()
-            star_not_activated = len(df_sorted) - star_activated
+            star_not_activated = total_rows - star_activated
 
             # Approval:
             # treat any value containing "accept" as accepted,
@@ -405,11 +456,12 @@ def get_table_data(
             decline_mask = appr_series.str.contains("declin", na=False)
             approval_accepted = accepted_mask.sum()
             approval_decline = decline_mask.sum()
-            approval_pending = len(df_sorted) - approval_accepted - approval_decline
+            approval_pending = total_rows - approval_accepted - approval_decline
 
             # Calendar status: Sent vs Invite Not Sent
             calendar_sent = (cal_series == "sent").sum()
             calendar_not_sent = (cal_series == "invite not sent").sum()
+
             # S1 success count based on Installation Status
             inst_series = (
                 df_sorted["Installation Status"]
@@ -419,6 +471,16 @@ def get_table_data(
                 .str.lower()
             )
             s1_success = (inst_series == "s1 - installed (success)").sum()
+
+            # Schedule coverage: scheduled vs unscheduled rows in the current view
+            sched_series = (
+                df_sorted["Schedule"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+            unscheduled = (sched_series == "").sum()
+            scheduled = total_rows - unscheduled
 
             stats = {
                 "active": True,  # show stats for overall or filtered
@@ -430,6 +492,8 @@ def get_table_data(
                 "calendar_sent": int(calendar_sent),
                 "calendar_not_sent": int(calendar_not_sent),
                 "s1_success": int(s1_success),
+                "scheduled": int(scheduled),
+                "unscheduled": int(unscheduled),
             }
 
     rows = []
@@ -513,11 +577,32 @@ TEMPLATE = """
             color: #6b7280;
             margin-bottom: 6px;
         }
+        .filter-toggle-bar {
+            display: flex;
+            justify-content: flex-start;
+            margin-bottom: 4px;
+        }
+        .filter-toggle-btn {
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #0ea5e9, #0369a1);
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(3, 105, 161, 0.35);
+        }
+        .filter-toggle-btn:hover {
+            background: linear-gradient(135deg, #0369a1, #075985);
+        }
+        .filter-container {
+            margin-bottom: 6px;
+        }
         .filter-bar {
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 6px;
             font-size: 12px;
             padding: 4px 10px;
             border-radius: 9999px;
@@ -547,6 +632,17 @@ TEMPLATE = """
         }
         .filter-bar select:hover {
             border-color: #0ea5e9;
+        }
+        .filter-clear-link {
+            margin-left: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #0ea5e9;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+        .filter-clear-link:hover {
+            text-decoration: underline;
         }
         .report-bar {
             margin: 4px 0 8px 0;
@@ -807,6 +903,7 @@ TEMPLATE = """
             color: #0f172a;
             text-align: center;
         }
+        /* Ensure text is white on error tiles like Starlink Not Activated / Calendar Invite Not Sent */
         /* Color tiles by type (using fixed order) */
         .stats-grid .stats-item:nth-child(1),
         .stats-grid .stats-item:nth-child(3),
@@ -844,12 +941,22 @@ TEMPLATE = """
         .stats-grid .stats-item:nth-child(7) .stats-value {
             color: #ffffff;
         }
+        /* Ensure text is white on all error tiles (stats-bad), overriding nth-child text colors */
+        .stats-grid .stats-item.stats-bad .stats-label,
+        .stats-grid .stats-item.stats-bad .stats-value {
+            color: #ffffff !important;
+        }
+        /* Ensure text is white on warning tiles (stats-warn), e.g. Approval Pending / Blank */
+        .stats-grid .stats-item.stats-warn .stats-label,
+        .stats-grid .stats-item.stats-warn .stats-value {
+            color: #ffffff !important;
+        }
         .stats-grid .stats-item.stats-ok {
             background: linear-gradient(135deg, #22c55e, #16a34a);  /* green */
             color: #ffffff;
         }
         .stats-grid .stats-item.stats-warn {
-            background: linear-gradient(135deg, #fde68a, #facc15);  /* yellow */
+            background: linear-gradient(135deg, #facc15, #eab308);  /* darker yellow */
             color: #1f2933;
         }
         .stats-grid .stats-item.stats-bad {
@@ -1091,36 +1198,60 @@ TEMPLATE = """
             • Schedule: {{ selected_schedule or 'All' }}
         </div>
 
-          <form method="get" class="filter-bar">
-              <label for="lot-select">Lot #:</label>
-              <select id="lot-select" name="lot" onchange="this.form.submit()">
-                  <option value="">All Lots</option>
-                  <option value="Lot #1" {% if selected_lot == 'Lot #1' %}selected{% endif %}>Lot #1</option>
-                  <option value="Lot #2" {% if selected_lot == 'Lot #2' %}selected{% endif %}>Lot #2</option>
-                  <option value="Lot #3" {% if selected_lot == 'Lot #3' %}selected{% endif %}>Lot #3</option>
-              </select>
-              <label for="region-select">Region:</label>
-              <select id="region-select" name="region" onchange="this.form.submit()">
-                <option value="">All Regions</option>
-                {% for r in region_options %}
-                <option value="{{ r }}" {% if selected_region == r %}selected{% endif %}>{{ r }}</option>
-                {% endfor %}
-            </select>
-            <label for="schedule-select">Schedule:</label>
-            <select id="schedule-select" name="schedule" onchange="this.form.submit()">
-                <option value="">All Dates</option>
-                {% for d in schedule_options %}
-                <option value="{{ d }}" {% if selected_schedule == d %}selected{% endif %}>{{ d }}</option>
-                {% endfor %}
-            </select>
-            <label for="installation-select">Installation:</label>
-              <select id="installation-select" name="installation" onchange="this.form.submit()">
-                  <option value="">All Installation Statuses</option>
-                  {% for inst in installation_options %}
-                  <option value="{{ inst }}" {% if selected_installation == inst %}selected{% endif %}>{{ inst }}</option>
-                  {% endfor %}
-              </select>
-          </form>
+          <div class="filter-toggle-bar">
+              <button type="button" class="filter-toggle-btn" id="toggle-filters">
+                  Filters
+              </button>
+          </div>
+          <div class="filter-container" id="filters-container" style="display: none;">
+              <form method="get" class="filter-bar">
+                    <label for="lot-select">Lot #:</label>
+                    <select id="lot-select" name="lot">
+                      <option value="">All Lots</option>
+                      <option value="Lot #1" {% if selected_lot == 'Lot #1' %}selected{% endif %}>Lot #1</option>
+                      <option value="Lot #2" {% if selected_lot == 'Lot #2' %}selected{% endif %}>Lot #2</option>
+                      <option value="Lot #3" {% if selected_lot == 'Lot #3' %}selected{% endif %}>Lot #3</option>
+                  </select>
+                    <label for="region-select">Region:</label>
+                    <select id="region-select" name="region">
+                    <option value="">All Regions</option>
+                    {% for r in region_options %}
+                    <option value="{{ r }}" {% if selected_region == r %}selected{% endif %}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+                  <label for="schedule-select">Schedule:</label>
+                  <select id="schedule-select" name="schedule">
+                    <option value="">All Dates</option>
+                    {% for d in schedule_options %}
+                    <option value="{{ d }}" {% if selected_schedule == d %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+                  <label for="installation-select">Installation:</label>
+                    <select id="installation-select" name="installation">
+                      <option value="">All Installation Statuses</option>
+                      {% for inst in installation_options %}
+                      <option value="{{ inst }}" {% if selected_installation == inst %}selected{% endif %}>{{ inst }}</option>
+                      {% endfor %}
+                  </select>
+                  <input
+                      id="search-input"
+                      type="text"
+                      name="search"
+                      value="{{ selected_search or '' }}"
+                      placeholder="Search..."
+                      style="font-size: 12px; padding: 3px 8px; border-radius: 9999px; border: 1px solid rgba(148,163,184,0.7); min-width: 140px; margin-left: 4px;"
+                  />
+                  <button type="submit" class="filter-toggle-btn" style="margin-left: 4px; padding: 3px 10px; font-size: 11px;">
+                      Apply
+                  </button>
+                  <a
+                      href="?{% if show_report %}report=1&{% endif %}{% if include_unscheduled %}full=1{% endif %}"
+                      class="filter-clear-link"
+                  >
+                      Clear filters
+                  </a>
+              </form>
+          </div>
           {% if show_report %}
           <div class="report-bar">
               <button type="button" class="report-trigger-btn" id="open-report-modal">
@@ -1210,7 +1341,12 @@ TEMPLATE = """
                     Summary for {{ selected_schedule or 'All Schedules' }}
                 </div>
                 <div class="stats-note">
+                    {% if include_unscheduled %}
+                    This includes all rows (even without schedule dates).<br>
+                    Scheduled: {{ stats.scheduled }} | Unscheduled: {{ stats.unscheduled }}
+                    {% else %}
                     This is for the sites with schedules only.
+                    {% endif %}
                 </div>
                 {% if selected_tile %}
                 <div class="stats-filter-note">
@@ -1313,70 +1449,115 @@ TEMPLATE = """
       const active = {{ 'true' if stats.active else 'false' }};
       if (!active) return;
 
-    // Starlink pie (Activated vs Not Activated)
-    const starEl = document.getElementById('starChart');
-    if (starEl) {
-        const starCtx = starEl.getContext('2d');
-        const starData = [{{ stats.star_activated }}, {{ stats.star_not_activated }}];
-        new Chart(starCtx, {
-            type: 'pie',
-            data: {
-                labels: ['Activated', 'Not Activated'],
-                datasets: [{
-                    data: starData,
+      // Starlink doughnut (Activated vs Not Activated)
+      const starEl = document.getElementById('starChart');
+      if (starEl) {
+          const starCtx = starEl.getContext('2d');
+          const starData = [{{ stats.star_activated }}, {{ stats.star_not_activated }}];
+          new Chart(starCtx, {
+              type: 'doughnut',
+              data: {
+                  labels: ['Activated', 'Not Activated'],
+                  datasets: [{
+                      data: starData,
                       backgroundColor: [
-                          'rgba(34, 197, 94, 0.85)',  // green
-                          'rgba(239, 68, 68, 0.85)',  // red
+                          'rgba(34, 197, 94, 0.90)',   // green
+                          'rgba(239, 68, 68, 0.90)',   // red
                       ],
-                    borderWidth: 0,
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { boxWidth: 8, font: { size: 8 } }
-                    }
-                }
-            }
-        });
-    }
-
-    // Approval pie (Accepted / Pending / Decline)
-    const apprEl = document.getElementById('approvalChart');
-    if (apprEl) {
-        const apprCtx = apprEl.getContext('2d');
-        const apprData = [
-            {{ stats.approval_accepted }},
-            {{ stats.approval_pending }},
-            {{ stats.approval_decline }},
-        ];
-        new Chart(apprCtx, {
-            type: 'pie',
-            data: {
-                labels: ['Accepted', 'Pending/Blank', 'Decline/Other'],
-                datasets: [{
-                    data: apprData,
-                      backgroundColor: [
-                          'rgba(34, 197, 94, 0.85)',   // green
-                          'rgba(250, 204, 21, 0.90)',  // yellow
-                          'rgba(239, 68, 68, 0.85)',   // red
-                      ],
-                    borderWidth: 0,
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { boxWidth: 8, font: { size: 8 } }
-                    }
-                }
-            }
+                      borderColor: '#ffffff',
+                      borderWidth: 1,
+                      hoverOffset: 6,
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  cutout: '55%',
+                  plugins: {
+                      legend: {
+                          position: 'bottom',
+                          labels: { boxWidth: 8, font: { size: 8 } }
+                      },
+                      tooltip: {
+                          callbacks: {
+                              label: function (context) {
+                                  const data = context.dataset.data || [];
+                                  const total = data.reduce((a, b) => a + b, 0) || 1;
+                                  const value = context.parsed;
+                                  const pct = ((value / total) * 100).toFixed(1);
+                                  return `${context.label}: ${value} (${pct}%)`;
+                              }
+                          }
+                      }
+                  }
+              }
           });
       }
+
+      // Approval doughnut (Accepted / Pending / Decline)
+      const apprEl = document.getElementById('approvalChart');
+      if (apprEl) {
+          const apprCtx = apprEl.getContext('2d');
+          const apprData = [
+              {{ stats.approval_accepted }},
+              {{ stats.approval_pending }},
+              {{ stats.approval_decline }},
+          ];
+          new Chart(apprCtx, {
+              type: 'doughnut',
+              data: {
+                  labels: ['Accepted', 'Pending/Blank', 'Decline/Other'],
+                  datasets: [{
+                      data: apprData,
+                      backgroundColor: [
+                          'rgba(34, 197, 94, 0.90)',   // green
+                          'rgba(250, 204, 21, 0.95)',  // yellow
+                          'rgba(239, 68, 68, 0.90)',   // red
+                      ],
+                      borderColor: '#ffffff',
+                      borderWidth: 1,
+                      hoverOffset: 6,
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  cutout: '55%',
+                  plugins: {
+                      legend: {
+                          position: 'bottom',
+                          labels: { boxWidth: 8, font: { size: 8 } }
+                      },
+                      tooltip: {
+                          callbacks: {
+                              label: function (context) {
+                                  const data = context.dataset.data || [];
+                                  const total = data.reduce((a, b) => a + b, 0) || 1;
+                                  const value = context.parsed;
+                                  const pct = ((value / total) * 100).toFixed(1);
+                                  return `${context.label}: ${value} (${pct}%)`;
+                              }
+                          }
+                      }
+                  }
+              }
+          });
+      }
+  })();
+
+  (function () {
+      const toggleBtn = document.getElementById('toggle-filters');
+      const container = document.getElementById('filters-container');
+      if (!toggleBtn || !container) return;
+
+      let visible = false;
+      function update() {
+          container.style.display = visible ? 'block' : 'none';
+      }
+      toggleBtn.addEventListener('click', function () {
+          visible = !visible;
+          update();
+      });
+      // Keep filters hidden by default on load
+      update();
   })();
 
   (function () {

@@ -6,6 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.chart import PieChart, Reference
 from openpyxl.chart.series import DataPoint
+from openpyxl.chart.label import DataLabelList
 
 from auto_table_core import TEMPLATE, get_table_data
 
@@ -227,6 +228,10 @@ def _build_workbook(rows, stats, selected_columns, include_stats, filters):
         dp_not = DataPoint(idx=1)
         dp_not.graphicalProperties.solidFill = "EF4444"
         star_series.dpt = [dp_activated, dp_not]
+        # Show values and percentages on slices
+        star_pie.dataLabels = DataLabelList()
+        star_pie.dataLabels.showVal = True
+        star_pie.dataLabels.showPercent = True
         star_pie.width = 10
         star_pie.height = 6
         ws_stats.add_chart(star_pie, "H2")
@@ -255,6 +260,10 @@ def _build_workbook(rows, stats, selected_columns, include_stats, filters):
         dp_decline = DataPoint(idx=2)
         dp_decline.graphicalProperties.solidFill = "EF4444"
         appr_series.dpt = [dp_acc, dp_pending, dp_decline]
+        # Show values and percentages on slices
+        appr_pie.dataLabels = DataLabelList()
+        appr_pie.dataLabels.showVal = True
+        appr_pie.dataLabels.showPercent = True
         appr_pie.width = 10
         appr_pie.height = 6
         ws_stats.add_chart(appr_pie, "H18")
@@ -271,6 +280,8 @@ def index(path: str):
     selected_installation = request.args.get("installation", "").strip() or None
     selected_tile = request.args.get("tile", "").strip() or None
     selected_lot = request.args.get("lot", "").strip() or None
+    selected_search = request.args.get("search", "").strip() or None
+    include_unscheduled = request.args.get("full", "") == "1"
 
     (
         rows,
@@ -278,12 +289,14 @@ def index(path: str):
         schedule_options,
         installation_options,
         stats,
-    ) = get_table_data(
-        selected_region,
-        selected_schedule,
-        selected_installation,
-        selected_tile,
-        selected_lot,
+      ) = get_table_data(
+          selected_region,
+          selected_schedule,
+          selected_installation,
+          selected_tile,
+          selected_lot,
+          include_unscheduled=include_unscheduled,
+          selected_search=selected_search,
     )
 
     # If download flag is present, stream XLSX instead of HTML
@@ -320,14 +333,16 @@ def index(path: str):
         rows=rows,
         region_options=region_options,
         schedule_options=schedule_options,
-        installation_options=installation_options,
-        selected_region=selected_region or "",
-        selected_schedule=selected_schedule or "",
-        selected_installation=selected_installation or "",
-        selected_tile=selected_tile or "",
-        selected_lot=selected_lot or "",
-        stats=stats,
+          installation_options=installation_options,
+          selected_region=selected_region or "",
+          selected_schedule=selected_schedule or "",
+          selected_installation=selected_installation or "",
+          selected_tile=selected_tile or "",
+          selected_lot=selected_lot or "",
+          selected_search=selected_search or "",
+          stats=stats,
         show_report=show_report,
+        include_unscheduled=include_unscheduled,
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 

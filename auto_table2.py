@@ -16,9 +16,17 @@ def index():
     selected_installation = request.args.get("installation", "").strip() or None
     selected_tile = request.args.get("tile", "").strip() or None
     selected_lot = request.args.get("lot", "").strip() or None
+    selected_search = request.args.get("search", "").strip() or None
+    include_unscheduled = request.args.get("full", "") == "1"
 
     rows, region_options, schedule_options, installation_options, stats = get_table_data(
-        selected_region, selected_schedule, selected_installation, selected_tile, selected_lot
+        selected_region,
+        selected_schedule,
+        selected_installation,
+        selected_tile,
+        selected_lot,
+        include_unscheduled=include_unscheduled,
+        selected_search=selected_search,
     )
 
     # Handle XLSX download when the report form is submitted
@@ -62,7 +70,9 @@ def index():
         selected_tile=selected_tile or "",
         show_report=show_report,
         selected_lot=selected_lot or "",
+        selected_search=selected_search or "",
         stats=stats,
+        include_unscheduled=include_unscheduled,
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 
