@@ -1469,7 +1469,7 @@ TEMPLATE = """
                 {% if selected_tile %}
                 <div class="stats-filter-note">
                     Status filter applied.
-                    <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}&installation={{ selected_installation }}" class="stats-filter-clear">
+                    <a href="#" onclick="clearTileFilter(); return false;" class="stats-filter-clear">
                         Clear filter
                     </a>
                 </div>
@@ -1594,6 +1594,16 @@ TEMPLATE = """
           form.appendChild(tileInput);
       }
       tileInput.value = tileValue;
+      form.submit();
+  }
+
+  function clearTileFilter() {
+      const form = document.querySelector('.filter-bar');
+      if (!form) return;
+      const tileInput = document.getElementById('tile-input');
+      if (tileInput) {
+          tileInput.value = '';
+      }
       form.submit();
   }
 
