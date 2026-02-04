@@ -303,6 +303,11 @@ def index(path: str):
     if request.args.get("download") == "xlsx":
         selected_columns = request.args.getlist("col")
         include_stats = request.args.get("include_stats", "1") == "1"
+        selected_report_schedules = [s.strip() for s in request.args.getlist("sched") if s.strip()]
+        rows_for_report = rows
+        if selected_report_schedules:
+            rows_for_report = [r for r in rows if str(r.get("Schedule", "")).strip() in selected_report_schedules]
+
         filters = {
             "region": selected_region,
             "schedule": selected_schedule,
@@ -310,7 +315,7 @@ def index(path: str):
             "tile": selected_tile,
             "lot": selected_lot,
         }
-        wb = _build_workbook(rows, stats, selected_columns, include_stats, filters)
+        wb = _build_workbook(rows_for_report, stats, selected_columns, include_stats, filters)
         buf = BytesIO()
         wb.save(buf)
         buf.seek(0)
@@ -333,14 +338,14 @@ def index(path: str):
         rows=rows,
         region_options=region_options,
         schedule_options=schedule_options,
-          installation_options=installation_options,
-          selected_region=selected_region or "",
-          selected_schedule=selected_schedule or "",
-          selected_installation=selected_installation or "",
-          selected_tile=selected_tile or "",
-          selected_lot=selected_lot or "",
-          selected_search=selected_search or "",
-          stats=stats,
+        installation_options=installation_options,
+        selected_region=selected_region or "",
+        selected_schedule=selected_schedule or "",
+        selected_installation=selected_installation or "",
+        selected_tile=selected_tile or "",
+        selected_lot=selected_lot or "",
+        selected_search=selected_search or "",
+        stats=stats,
         show_report=show_report,
         include_unscheduled=include_unscheduled,
         last_updated=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

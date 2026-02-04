@@ -150,16 +150,16 @@ def load_main_df() -> pd.DataFrame:
 
 
 def get_table_data(
-    selected_region: str | None = None,
-    selected_schedule: str | None = None,
-    selected_installation: str | None = None,
-    selected_tile: str | None = None,
-    selected_lot: str | None = None,
-    selected_final: str | None = None,
-    selected_validated: str | None = None,
-    include_unscheduled: bool = False,
-    selected_search: str | None = None,
-):
+      selected_region: str | None = None,
+      selected_schedule=None,
+      selected_installation: str | None = None,
+      selected_tile: str | None = None,
+      selected_lot: str | None = None,
+      selected_final: str | None = None,
+      selected_validated: str | None = None,
+      include_unscheduled: bool = False,
+      selected_search: str | None = None,
+  ):
     """Return rows, filter options, and stats for the dashboard."""
     df_main = load_main_df()
     if df_main.empty:
@@ -360,7 +360,10 @@ def get_table_data(
     if selected_region:
         df_sorted = df_sorted[df_sorted["Region"] == selected_region]
     if selected_schedule:
-        df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
+        if isinstance(selected_schedule, (list, tuple, set)):
+            df_sorted = df_sorted[df_sorted["Schedule_display"].isin(selected_schedule)]
+        else:
+            df_sorted = df_sorted[df_sorted["Schedule_display"] == selected_schedule]
     if selected_installation:
         # Special value for blank Installation Status
         if selected_installation == "__blank__":
@@ -952,8 +955,15 @@ TEMPLATE = """
         }
         .stats-tile-link {
             display: block;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+            border: none;
+            background: transparent;
             text-decoration: none;
             color: inherit;
+            cursor: pointer;
         }
         .stats-label {
             color: #4b5563;
@@ -1226,24 +1236,33 @@ TEMPLATE = """
                 <input type="hidden" name="tile" value="{{ selected_tile }}">
                 <input type="hidden" name="lot" value="{{ selected_lot }}">
                 <input type="hidden" name="download" value="xlsx">
-                <div class="report-modal-body">
-                    <span>Include columns:</span>
-                    <label><input type="checkbox" name="col" value="Region" checked> Region</label>
-                    <label><input type="checkbox" name="col" value="Province" checked> Province</label>
-                    <label><input type="checkbox" name="col" value="BEIS School ID" checked> BEIS ID</label>
-                    <label><input type="checkbox" name="col" value="Schedule" checked> Schedule</label>
-                    <label><input type="checkbox" name="col" value="Calendar Status" checked> Calendar</label>
-                    <label><input type="checkbox" name="col" value="Start Time" checked> Start</label>
-                    <label><input type="checkbox" name="col" value="End Time" checked> End</label>
-                    <label><input type="checkbox" name="col" value="Installation Status" checked> Installation</label>
-                    <label><input type="checkbox" name="col" value="Starlink Status" checked> Starlink</label>
-                    <label><input type="checkbox" name="col" value="Approval" checked> Approval</label>
-                    <label><input type="checkbox" name="col" value="Blocker" checked> Blocker</label>
-                    <label>
-                        <input type="checkbox" name="include_stats" value="1" checked>
-                        Include summary & charts
-                    </label>
-                </div>
+                  <div class="report-modal-body">
+                      <span>Include columns:</span>
+                      <label><input type="checkbox" name="col" value="Region" checked> Region</label>
+                      <label><input type="checkbox" name="col" value="Province" checked> Province</label>
+                      <label><input type="checkbox" name="col" value="BEIS School ID" checked> BEIS ID</label>
+                      <label><input type="checkbox" name="col" value="Schedule" checked> Schedule</label>
+                      <label><input type="checkbox" name="col" value="Calendar Status" checked> Calendar</label>
+                      <label><input type="checkbox" name="col" value="Start Time" checked> Start</label>
+                      <label><input type="checkbox" name="col" value="End Time" checked> End</label>
+                      <label><input type="checkbox" name="col" value="Installation Status" checked> Installation</label>
+                      <label><input type="checkbox" name="col" value="Starlink Status" checked> Starlink</label>
+                      <label><input type="checkbox" name="col" value="Approval" checked> Approval</label>
+                      <label><input type="checkbox" name="col" value="Blocker" checked> Blocker</label>
+                      <label>
+                          <input type="checkbox" name="include_stats" value="1" checked>
+                          Include summary & charts
+                      </label>
+                  </div>
+                  <div class="report-modal-body">
+                      <span>Include dates:</span>
+                      {% for d in schedule_options %}
+                      <label>
+                          <input type="checkbox" name="sched" value="{{ d }}" checked>
+                          {{ d }}
+                      </label>
+                      {% endfor %}
+                  </div>
                 <div class="report-modal-footer">
                     <button type="button" class="secondary" id="cancel-report-modal">Cancel</button>
                     <button type="submit" class="primary">Download Report</button>
@@ -1272,6 +1291,14 @@ TEMPLATE = """
               <form method="get" class="filter-bar">
                     {% if include_unscheduled %}
                     <input type="hidden" name="full" value="1">
+                    {% endif %}
+                    {% if show_report %}
+                    <input type="hidden" name="report" value="1">
+                    {% endif %}
+                    {% if selected_tile %}
+                    <input type="hidden" id="tile-input" name="tile" value="{{ selected_tile }}">
+                    {% else %}
+                    <input type="hidden" id="tile-input" name="tile" value="">
                     {% endif %}
                     <label for="lot-select">Lot #:</label>
                     <select id="lot-select" name="lot">
@@ -1449,80 +1476,99 @@ TEMPLATE = """
                 {% endif %}
                     <div class="stats-main">
                           <div class="stats-grid">
-                              <!-- Row 1: Starlink -->
+                              {# Row 1: Starlink #}
+                              {% if stats.star_activated %}
                               <div class="stats-item stats-ok">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=star_activated" class="stats-tile-link">
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('star_activated')">
                                       <div class="stats-label">✔ Starlink Activated</div>
                                       <div class="stats-value">{{ stats.star_activated }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
+                              {% if stats.star_not_activated %}
                               <div class="stats-item stats-bad">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=star_not_activated" class="stats-tile-link">
-                                      <div class="stats-label">⚠ Starlink Not Activated</div>
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('star_not_activated')">
+                                      <div class="stats-label">✖ Starlink Not Activated</div>
                                       <div class="stats-value">{{ stats.star_not_activated }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
                     
-                              <!-- Row 2: Approval -->
+                              {# Row 2: Approval (Accepted / Pending) #}
+                              {% if stats.approval_accepted %}
                               <div class="stats-item stats-ok">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=approval_accepted" class="stats-tile-link">
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('approval_accepted')">
                                       <div class="stats-label">✔ Approval Accepted</div>
                                       <div class="stats-value">{{ stats.approval_accepted }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
+                              {% if stats.approval_pending %}
                               <div class="stats-item stats-warn">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=approval_pending" class="stats-tile-link">
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('approval_pending')">
                                       <div class="stats-label">⚠ Approval Pending / Blank</div>
                                       <div class="stats-value">{{ stats.approval_pending }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
                     
-                              <!-- Row 3: Calendar -->
+                              {# Row 3: Calendar (Sent / Not Sent) #}
+                              {% if stats.calendar_sent %}
                               <div class="stats-item stats-ok">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=calendar_sent" class="stats-tile-link">
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('calendar_sent')">
                                       <div class="stats-label">✔ Calendar Sent</div>
                                       <div class="stats-value">{{ stats.calendar_sent }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
+                              {% if stats.calendar_not_sent %}
                               <div class="stats-item stats-bad">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=calendar_not_sent" class="stats-tile-link">
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('calendar_not_sent')">
                                       <div class="stats-label">✖ Calendar Invite Not Sent</div>
                                       <div class="stats-value">{{ stats.calendar_not_sent }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
                     
-                              <!-- Row 4: S1 Installed (Success) -->
+                              {# Row 4: S1 Installed (Success) #}
+                              {% if stats.s1_success %}
                               <div class="stats-item stats-ok">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=s1_success" class="stats-tile-link">
-                                      <div class="stats-label">✔ S1 - Installed (Success)</div>
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('s1_success')">
+                                      <div class="stats-label">✔ S1 – Installed (Success)</div>
                                       <div class="stats-value">{{ stats.s1_success }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
                     
-                              <!-- Row 5: Approval Decline / Other -->
+                              {# Row 5: Approval Decline / Other #}
+                              {% if stats.approval_decline %}
                               <div class="stats-item stats-bad">
-                                  <a href="?region={{ selected_region }}&schedule={{ selected_schedule }}
-                      &installation={{ selected_installation }}&tile=approval_decline" class="stats-tile-link">
+                                  <button type="button" class="stats-tile-link"
+                                          onclick="applyTileFilter('approval_decline')">
                                       <div class="stats-label">✖ Approval Decline / Other</div>
                                       <div class="stats-value">{{ stats.approval_decline }}</div>
-                                  </a>
+                                  </button>
                               </div>
+                              {% endif %}
                           </div>
+                    
                           <div class="stats-charts">
                               <div class="stats-chart">
                                   <div class="stats-label">Starlink Status</div>
-                                  <canvas id="starChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
+                                  <canvas id="starChart"
+                                          style="width: 100%; max-width: 170px; height: 70px;"></canvas>
                               </div>
                               <div class="stats-chart">
                                   <div class="stats-label">Approval Status</div>
-                                  <canvas id="approvalChart" style="width: 100%; max-width: 170px; height: 70px;"></canvas>
+                                  <canvas id="approvalChart"
+                                          style="width: 100%; max-width: 170px; height: 70px;"></canvas>
                               </div>
                           </div>
                       </div>
@@ -1536,6 +1582,21 @@ TEMPLATE = """
 </html>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
+  function applyTileFilter(tileValue) {
+      const form = document.querySelector('.filter-bar');
+      if (!form) return;
+      let tileInput = document.getElementById('tile-input');
+      if (!tileInput) {
+          tileInput = document.createElement('input');
+          tileInput.type = 'hidden';
+          tileInput.name = 'tile';
+          tileInput.id = 'tile-input';
+          form.appendChild(tileInput);
+      }
+      tileInput.value = tileValue;
+      form.submit();
+  }
+
   (function () {
       const active = {{ 'true' if stats.active else 'false' }};
       if (!active) return;
