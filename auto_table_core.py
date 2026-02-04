@@ -104,6 +104,7 @@ def load_main_df() -> pd.DataFrame:
         cols[0] = "Region"
         df.columns = cols
 
+    # Core columns we must have
     required = [
         "Region",
         "Province",
@@ -118,11 +119,22 @@ def load_main_df() -> pd.DataFrame:
     if df.empty or any(col not in df.columns for col in required):
         return pd.DataFrame(columns=required)
 
-    df = df[required].copy()
+    # Always treat column B (index 1) as Division, regardless of header.
+    # This matches the current layout of the master sheet.
+    if not df.empty and df.shape[1] > 1:
+        df["Division"] = df.iloc[:, 1].astype(str).str.strip()
+    else:
+        df["Division"] = ""
+
+    # Optional columns that we show if present (e.g., Division)
+    optional = ["Division"]
+    cols = required + [c for c in optional if c in df.columns]
+    df = df[cols].copy()
 
     # Clean up core text fields
-    for col in ["Region", "Province", "BEIS School ID"]:
-        df[col] = df[col].astype(str).str.strip()
+    for col in ["Region", "Division", "Province", "BEIS School ID"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
 
     # Clean schedule, outcome, blocker
     df[SCHEDULE_COL] = df[SCHEDULE_COL].fillna("").astype(str).str.strip()
@@ -518,6 +530,7 @@ def get_table_data(
         rows.append(
             {
                 "Region": row["Region"],
+                "Division": row.get("Division", ""),
                 "Province": row["Province"],
                 "BEIS School ID": row["BEIS School ID"],
                 "Schedule": row["Schedule_display"],
@@ -1264,10 +1277,11 @@ TEMPLATE = """
             <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr>
-                            <th>Region</th>
-                            <th>Province</th>
-                            <th>BEIS ID</th>
+                          <tr>
+                              <th>Region</th>
+                              <th>Division</th>
+                              <th>Province</th>
+                              <th>BEIS ID</th>
                             <th title="Schedule of Delivery/Installation">Schedule</th>
                             <th title="Status of Calendar">Calendar</th>
                             <th title="Start Time">Start</th>
@@ -1288,10 +1302,11 @@ TEMPLATE = """
                         {% elif star != 'activated' %}
                             {% set row_class = 'row-warning' %}
                         {% endif %}
-                        <tr class="{{ row_class }}">
-                            <td class="region-cell">{{ row["Region"] }}</td>
-                            <td>{{ row["Province"] }}</td>
-                            <td class="school-cell">{{ row["BEIS School ID"] }}</td>
+                          <tr class="{{ row_class }}">
+                              <td class="region-cell">{{ row["Region"] }}</td>
+                              <td>{{ row["Division"] }}</td>
+                              <td>{{ row["Province"] }}</td>
+                              <td class="school-cell">{{ row["BEIS School ID"] }}</td>
                             <td>{{ row["Schedule"] }}</td>
                             <td>
                                 {% set cal = row["Calendar Status"] or "" %}
@@ -1329,7 +1344,7 @@ TEMPLATE = """
                         {% endfor %}
                         {% if rows|length == 0 %}
                         <tr>
-                            <td colspan="11">No data available (check sheet names/columns or schedule values).</td>
+                            <td colspan="12">No data available (check sheet names/columns or schedule values).</td>
                         </tr>
                         {% endif %}
                     </tbody>
