@@ -13,7 +13,8 @@ SPREADSHEET_ID_STARLINK = "1XdByRZ3zYX5pfqEoufLXb3qnPTIh2rBmnfl4JzWoEbQ"
 SPREADSHEET_ID_MAIN = "1zchK5za6LM5aj91s4KDn-CCgNJ5vQFDsCk_ov4XsSn4"
 
 # Column names with line breaks in headers (as in the Sheets)
-SCHEDULE_COL = "Schedule of Delivery/\\nInstallation".replace("\\n", "\n")
+SCHEDULE_COL = "Schedule of Delivery/\\nInstallation\\n(Start Date)".replace("\\n", "\n")
+SCHEDULE_END_COL = "Schedule of Delivery/\\nInstallation\\n(End Date)".replace("\\n", "\n")
 OUTCOME_COL = "Outcome Status \\n (to be Accomplished by Supplier)".replace("\\n", "\n")
 BLOCKER_COL = "Blocker \\n (to be Accomplished by Supplier)".replace("\\n", "\n")
 
@@ -104,12 +105,17 @@ def load_main_df() -> pd.DataFrame:
         cols[0] = "Region"
         df.columns = cols
 
+    # Ensure end-date schedule column exists (older sheets may not have it yet)
+    if not df.empty and SCHEDULE_END_COL not in df.columns:
+        df[SCHEDULE_END_COL] = ""
+
     # Core columns we must have
     required = [
         "Region",
         "Province",
         "BEIS School ID",
         SCHEDULE_COL,
+        SCHEDULE_END_COL,
         "Start Time",
         "End Time",
         OUTCOME_COL,
@@ -138,6 +144,7 @@ def load_main_df() -> pd.DataFrame:
 
     # Clean schedule, outcome, blocker
     df[SCHEDULE_COL] = df[SCHEDULE_COL].fillna("").astype(str).str.strip()
+    df[SCHEDULE_END_COL] = df[SCHEDULE_END_COL].fillna("").astype(str).str.strip()
     df[OUTCOME_COL] = df[OUTCOME_COL].fillna("").astype(str).str.strip()
     df[BLOCKER_COL] = df[BLOCKER_COL].fillna("").astype(str).str.strip()
     df["Status of Calendar"] = df["Status of Calendar"].fillna("").astype(str).str.strip()
@@ -207,8 +214,9 @@ def get_table_data(
     else:
         df_merged["Calendar Status"] = ""
 
-    # Expose cleaned schedule as a simple field (string)
+    # Expose cleaned schedule (start/end) as simple fields (strings)
     df_merged["Schedule"] = df_merged[SCHEDULE_COL].fillna("").astype(str).str.strip()
+    df_merged["Schedule_end_raw"] = df_merged[SCHEDULE_END_COL].fillna("").astype(str).str.strip()
 
     # For sorting, parse schedule as a date where possible with several formats
     def _parse_schedule(val: str):
@@ -247,16 +255,37 @@ def get_table_data(
         df_merged["End Time"], errors="coerce", format="%I:%M %p"
     )
 
-    # Build a consistent display string for schedule dates, e.g. "Feb. 02, 2026"
+    # Build a consistent display string for schedule dates, e.g. "Feb. 02, 2026 - Feb. 05, 2026"
     def _format_schedule(row):
-        ts = row.get("Schedule_sort")
-        s = row["Schedule"]
-        if pd.notna(ts):
+        ts_start = row.get("Schedule_sort")
+        start_raw = row["Schedule"]
+        # Format start date
+        if pd.notna(ts_start):
             try:
-                return ts.strftime("%b. %d, %Y")
+                start_text = ts_start.strftime("%b. %d, %Y")
             except Exception:
-                return s
-        return s
+                start_text = start_raw
+        else:
+            start_text = start_raw
+
+        # Format end date
+        end_raw = row.get("Schedule_end_raw", "") or ""
+        end_raw = str(end_raw).strip()
+        if not end_raw:
+            end_text = "-"
+        else:
+            ts_end = _parse_schedule(end_raw)
+            if pd.notna(ts_end):
+                try:
+                    end_text = ts_end.strftime("%b. %d, %Y")
+                except Exception:
+                    end_text = end_raw
+            else:
+                end_text = end_raw
+
+        if not start_text:
+            return ""
+        return f"{start_text} - {end_text}"
 
     df_merged["Schedule_display"] = df_merged.apply(_format_schedule, axis=1)
 
@@ -1379,7 +1408,7 @@ TEMPLATE = """
                               <th>Division</th>
                               <th>Province</th>
                               <th>BEIS ID</th>
-                            <th title="Schedule of Delivery/Installation">Schedule</th>
+                              <th title="Schedule of Delivery/Installation (Start-End)">Schedule (Start-End)</th>
                             <th title="Status of Calendar">Calendar</th>
                             <th title="Start–End">Time</th>
                             <th title="Outcome Status (to be Accomplished by Supplier)">Installation</th>
