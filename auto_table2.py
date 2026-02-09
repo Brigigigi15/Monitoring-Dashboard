@@ -12,7 +12,17 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     selected_region = request.args.get("region", "").strip() or None
-    selected_schedule = request.args.get("schedule", "").strip() or None
+    raw_schedules = [s.strip() for s in request.args.getlist("schedule") if s.strip()]
+    if not raw_schedules:
+        selected_schedule = None
+        selected_schedule_list = []
+    elif len(raw_schedules) == 1:
+        selected_schedule = raw_schedules[0]
+        selected_schedule_list = raw_schedules
+    else:
+        selected_schedule = raw_schedules
+        selected_schedule_list = raw_schedules
+
     selected_installation = request.args.get("installation", "").strip() or None
     selected_final = request.args.get("final", "").strip() or None
     selected_validated = request.args.get("validated", "").strip() or None
@@ -47,7 +57,7 @@ def index():
         include_stats = request.args.get("include_stats", "1") == "1"
         filters = {
             "region": selected_region,
-            "schedule": selected_schedule,
+            "schedule": ", ".join(selected_schedule_list) if selected_schedule_list else "All",
             "installation": selected_installation,
             "tile": selected_tile,
             "lot": selected_lot,
@@ -69,6 +79,10 @@ def index():
         )
 
     show_report = request.args.get("report", "") == "1"
+    if not selected_schedule_list:
+        selected_schedule_label = "All"
+    else:
+        selected_schedule_label = ", ".join(selected_schedule_list)
 
     return render_template_string(
         TEMPLATE,
@@ -77,6 +91,8 @@ def index():
         schedule_options=schedule_options,
         selected_region=selected_region or "",
         selected_schedule=selected_schedule or "",
+        selected_schedule_list=selected_schedule_list,
+        selected_schedule_label=selected_schedule_label,
         installation_options=installation_options,
         selected_installation=selected_installation or "",
         final_status_options=final_status_options,

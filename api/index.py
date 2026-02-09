@@ -276,7 +276,18 @@ def _build_workbook(rows, stats, selected_columns, include_stats, filters):
 def index(path: str):
     # Main dashboard handler (also handles report download when ?download=xlsx)
     selected_region = request.args.get("region", "").strip() or None
-    selected_schedule = request.args.get("schedule", "").strip() or None
+    raw_schedules = [s.strip() for s in request.args.getlist("schedule") if s.strip()]
+    if not raw_schedules:
+        selected_schedule = None
+        selected_schedule_list = []
+    elif len(raw_schedules) == 1:
+        selected_schedule = raw_schedules[0]
+        selected_schedule_list = raw_schedules
+    else:
+        # For get_table_data we can pass a list to enable multi-schedule filtering
+        selected_schedule = raw_schedules
+        selected_schedule_list = raw_schedules
+
     selected_installation = request.args.get("installation", "").strip() or None
     selected_tile = request.args.get("tile", "").strip() or None
     selected_lot = request.args.get("lot", "").strip() or None
@@ -310,7 +321,7 @@ def index(path: str):
 
         filters = {
             "region": selected_region,
-            "schedule": selected_schedule,
+            "schedule": ", ".join(selected_schedule_list) if selected_schedule_list else "All",
             "installation": selected_installation,
             "tile": selected_tile,
             "lot": selected_lot,
@@ -332,6 +343,11 @@ def index(path: str):
         )
 
     show_report = request.args.get("report", "") == "1"
+    # Label for meta-line and stats card
+    if not selected_schedule_list:
+        selected_schedule_label = "All"
+    else:
+        selected_schedule_label = ", ".join(selected_schedule_list)
 
     return render_template_string(
         TEMPLATE,
@@ -341,6 +357,8 @@ def index(path: str):
         installation_options=installation_options,
         selected_region=selected_region or "",
         selected_schedule=selected_schedule or "",
+        selected_schedule_list=selected_schedule_list,
+        selected_schedule_label=selected_schedule_label,
         selected_installation=selected_installation or "",
         selected_tile=selected_tile or "",
         selected_lot=selected_lot or "",

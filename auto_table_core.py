@@ -1260,7 +1260,13 @@ TEMPLATE = """
             </div>
             <form method="get" action="" class="report-modal-form">
                 <input type="hidden" name="region" value="{{ selected_region }}">
-                <input type="hidden" name="schedule" value="{{ selected_schedule }}">
+                {% if selected_schedule_list %}
+                {% for s in selected_schedule_list %}
+                <input type="hidden" name="schedule" value="{{ s }}">
+                {% endfor %}
+                {% else %}
+                <input type="hidden" name="schedule" value="">
+                {% endif %}
                 <input type="hidden" name="installation" value="{{ selected_installation }}">
                 <input type="hidden" name="tile" value="{{ selected_tile }}">
                 <input type="hidden" name="lot" value="{{ selected_lot }}">
@@ -1344,10 +1350,9 @@ TEMPLATE = """
                     {% endfor %}
                 </select>
                   <label for="schedule-select">Schedule:</label>
-                  <select id="schedule-select" name="schedule">
-                    <option value="">All Dates</option>
+                  <select id="schedule-select" name="schedule" multiple size="1">
                     {% for d in schedule_options %}
-                    <option value="{{ d }}" {% if selected_schedule == d %}selected{% endif %}>{{ d }}</option>
+                    <option value="{{ d }}" {% if selected_schedule_list and d in selected_schedule_list %}selected{% endif %}>{{ d }}</option>
                     {% endfor %}
                 </select>
                   <label for="installation-select">Installation:</label>
@@ -1485,7 +1490,7 @@ TEMPLATE = """
             {% if stats.active %}
             <div class="stats-card">
                 <div class="stats-title">
-                    Summary for {{ selected_schedule or 'All Schedules' }}
+                    Summary for {{ selected_schedule_label or 'All Schedules' }}
                 </div>
                 <div class="stats-note">
                     {% if include_unscheduled %}
