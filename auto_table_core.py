@@ -1283,20 +1283,13 @@ TEMPLATE = """
                       <label><input type="checkbox" name="col" value="Installation Status" checked> Installation</label>
                       <label><input type="checkbox" name="col" value="Starlink Status" checked> Starlink</label>
                       <label><input type="checkbox" name="col" value="Approval" checked> Approval</label>
+                      <label><input type="checkbox" name="col" value="Final Status" checked> Final Status</label>
+                      <label><input type="checkbox" name="col" value="Validated?" checked> Validated?</label>
                       <label><input type="checkbox" name="col" value="Blocker" checked> Blocker</label>
                       <label>
                           <input type="checkbox" name="include_stats" value="1" checked>
                           Include summary & charts
                       </label>
-                  </div>
-                  <div class="report-modal-body">
-                      <span>Include dates:</span>
-                      {% for d in schedule_options %}
-                      <label>
-                          <input type="checkbox" name="sched" value="{{ d }}" checked>
-                          {{ d }}
-                      </label>
-                      {% endfor %}
                   </div>
                 <div class="report-modal-footer">
                     <button type="button" class="secondary" id="cancel-report-modal">Cancel</button>

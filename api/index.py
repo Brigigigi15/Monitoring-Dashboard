@@ -31,6 +31,8 @@ def _build_workbook(rows, stats, selected_columns, include_stats, filters):
         "Installation Status",
         "Starlink Status",
         "Approval",
+        "Final Status",
+        "Validated?",
         "Blocker",
     ]
     columns = selected_columns or default_columns
@@ -314,11 +316,6 @@ def index(path: str):
     if request.args.get("download") == "xlsx":
         selected_columns = request.args.getlist("col")
         include_stats = request.args.get("include_stats", "1") == "1"
-        selected_report_schedules = [s.strip() for s in request.args.getlist("sched") if s.strip()]
-        rows_for_report = rows
-        if selected_report_schedules:
-            rows_for_report = [r for r in rows if str(r.get("Schedule", "")).strip() in selected_report_schedules]
-
         filters = {
             "region": selected_region,
             "schedule": ", ".join(selected_schedule_list) if selected_schedule_list else "All",
@@ -326,7 +323,7 @@ def index(path: str):
             "tile": selected_tile,
             "lot": selected_lot,
         }
-        wb = _build_workbook(rows_for_report, stats, selected_columns, include_stats, filters)
+        wb = _build_workbook(rows, stats, selected_columns, include_stats, filters)
         buf = BytesIO()
         wb.save(buf)
         buf.seek(0)
