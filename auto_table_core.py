@@ -593,6 +593,12 @@ def get_table_data(
         approval_raw = row.get("Approval (Accepted / Decline) ", "")
         if pd.isna(approval_raw):
             approval_raw = ""
+        approval_text = str(approval_raw).strip()
+        if not approval_text:
+            # Mirror dashboard behavior: treat blank/None as "Pending"
+            approval_display = "Pending"
+        else:
+            approval_display = approval_text
 
         # Normalize schedule display to a consistent text format, e.g. "Feb. 02, 2026"
         schedule_display = row["Schedule"]
@@ -615,7 +621,7 @@ def get_table_data(
                 "End Time": row["End Time"],
                 "Installation Status": row["Installation Status"],
                 "Starlink Status": star,
-                "Approval": approval_raw,
+                "Approval": approval_display,
                 "Final Status": row.get("Final Status", ""),
                 "Validated?": row.get("Validated?", ""),
                 "Blocker": row[BLOCKER_COL],
