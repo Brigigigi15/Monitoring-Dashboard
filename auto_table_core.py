@@ -409,12 +409,14 @@ def get_table_data(
         df_sorted = df_sorted[df_sorted["Final Status"] == selected_final]
     if selected_validated and "Validated?" in df_sorted.columns:
         df_sorted = df_sorted[df_sorted["Validated?"] == selected_validated]
-    # Free-text search across key columns
+    # Free-text search across key columns (supports multiple comma-separated terms)
     if selected_search:
-        needle = selected_search.strip()
-        if needle:
+        # Split on commas, trim spaces, ignore empties
+        terms = [t.strip() for t in selected_search.split(",") if t.strip()]
+        if terms:
             cols_to_search = [
                 "Region",
+                "Division",
                 "Province",
                 "BEIS School ID",
                 "Schedule_display",
@@ -429,7 +431,10 @@ def get_table_data(
             for col in cols_to_search:
                 if col in df_sorted.columns:
                     series = df_sorted[col].fillna("").astype(str)
-                    masks.append(series.str.contains(needle, case=False, na=False))
+                    for term in terms:
+                        masks.append(
+                            series.str.contains(term, case=False, na=False)
+                        )
             if masks:
                 combined = masks[0]
                 for m in masks[1:]:
